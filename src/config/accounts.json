@@ -1,24 +1,3 @@
 {
-  "users": {
-    "annotator1": {
-      "salt": "PfN6/VI3srhaGaHdOx/8Eg==",
-      "iterations": 200000,
-      "passwordHash": "yPQRF3iJMOTsuNEYNH9OtlSFIdROwyOFlQIPhuWbLEw="
-    },
-    "annotator2": {
-      "salt": "oWnvgF/KWnkWL0rNLMYVpA==",
-      "iterations": 200000,
-      "passwordHash": "zKofUs34xu1vNyhcup5hcz1ycWLXew9F3cEGsVCyqto="
-    },
-    "Yuting": {
-      "salt": "j/zkcp/T8l62qVYIfoIsjw==",
-      "iterations": 200000,
-      "passwordHash": "oAc5/1VpnHMdlTjWOBFTA60NB0YtEErpRjqn6RoWe2g="
-    },
-    "admin": {
-      "salt": "wH1t/dNjYVahRoTbuNUx/Q==",
-      "iterations": 200000,
-      "passwordHash": "bZlrVudAnVtRI3VMdLXnBb4MqMAmrMXlKZVTZ3IbANA="
-    }
-  }
+  "users": {}
 }

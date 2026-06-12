@@ -1,14 +1,15 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
-  output: 'export',
-  //basePath: '/ann',
-  //assetPrefix: '/ann',
-  
-  basePath: '/SarkerlabLLM/NER_annotation_tool',
-  assetPrefix: '/SarkerlabLLM/NER_annotation_tool/',
-  //// Configure trailing slash behavior to match nginx
-  trailingSlash: true,
+  // Runs as a Node server (`next start`) so the app can persist a shared project
+  // and per-user annotations in SQLite. Static export ('output: export') cannot
+  // support cross-user collaboration. If served under a subpath behind nginx, set
+  // `basePath` below instead of re-enabling static export.
+
+  // basePath: '/SarkerlabLLM/NER_annotation_tool',
+
+  // better-sqlite3 is a native module; keep it external to the server bundle.
+  serverExternalPackages: ['better-sqlite3'],
 
   /* config options here */
   typescript: {

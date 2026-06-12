@@ -3,8 +3,8 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: 'Annotator Pro',
-  description: 'An NER annotation tool with AI-powered suggestions.',
+  title: 'BMI Annotation Tool',
+  description: 'A span-level NER annotation tool.',
 };
 
 export default function RootLayout({
