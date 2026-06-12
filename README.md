@@ -1,85 +1,69 @@
 # BMI Annotation Tool
 
-A collaborative, Label Studio-style text annotation app (Next.js). An admin
-uploads **one shared project** (a data file + an XML labeling interface) and every
-logged-in user — including external collaborators reaching the app through a
-shared link — annotates **their own private copy** of that same project. Users
-never see each other's annotations; the admin exports any selection of them.
+A collaborative text annotation app (Next.js), similar to Label Studio. An admin
+uploads one shared project (a data file + an XML labeling config), and every
+logged-in user annotates their own private copy. Users don't see each other's
+work; the admin exports whichever annotators they want.
 
-## Architecture
+## How it works
 
-The app runs as a **Node server** (`next start`) backed by a single **SQLite**
-file. This replaces the previous static-export build, which could not share a
-project across browsers/machines. State lives in the database, not the browser:
+The app is a Node server (`next start`) backed by one SQLite file. State lives in
+the database, not the browser. The main tables:
 
-- `project` / `tasks` — the single uploaded project and its unannotated rows.
-- `annotations` — each user's private results, keyed by `(task, user)`.
-- `users` / `sessions` — accounts and httpOnly cookie sessions (real server-side
-  access control, not just a workflow gate).
+- `project` / `tasks` — the uploaded project and its rows.
+- `annotations` — each user's results, keyed by `(task, user)`.
+- `users` / `sessions` — accounts and httpOnly cookie sessions.
 
-The database file is `DATA_DIR/annotation.db` (default `./data/annotation.db`).
-Back it up by copying that file.
+The database is at `DATA_DIR/annotation.db` (default `./data/annotation.db`). To
+back it up, copy that file.
 
-## User flow
+## Usage
 
-1. **Admin logs in** (seeded account, see below).
-2. **Admin uploads a project**: sets the labeling XML (**Labeling Setup**) and
-   imports a `.csv`/`.xlsx`/`.json` file (**Upload Project**). Any annotations in
-   the file are stripped so everyone starts clean.
-3. **Admin creates annotator accounts** (**Create Account**) and shares the app
-   URL + credentials.
-4. **Collaborators log in** and land directly on the shared project: the same
-   unannotated tasks and the same interface. They have no import/admin controls.
-5. **They annotate.** Each change auto-saves to the server, private to them.
-6. **Admin exports** (**Export**): a dialog lists every account with checkboxes —
-   include/exclude whoever you want — then downloads a combined Label Studio JSON
-   (each task carries one `annotations` entry per selected user, tagged with
-   `completed_by`) or a CSV (one row per task and annotator).
+1. Admin logs in (see [Accounts](#accounts)).
+2. Admin sets the labeling XML (**Labeling Setup**) and imports a
+   `.csv`/`.xlsx`/`.json` file (**Upload Project**). Existing annotations in the
+   file are stripped.
+3. Admin creates annotator accounts (**Create Account**) and shares the URL +
+   credentials.
+4. Annotators log in and land on the shared project. They have no admin controls.
+5. They annotate; each change auto-saves, private to them.
+6. Admin exports (**Export**): pick accounts with checkboxes, then download a
+   Label Studio JSON (one `annotations` entry per user, tagged `completed_by`) or
+   a CSV (one row per task and annotator).
 
-> Re-uploading a project **replaces** it and permanently deletes every
-> annotator's work (the admin is warned first).
+Re-uploading a project replaces it and deletes everyone's work (you get a
+warning first).
 
 ## Labeling configuration
 
-The annotation UI is defined by a **Label Studio-style XML labeling config**,
-edited by admins in the **Labeling Setup** dialog (XML editor + task-type
-templates + live preview + validation) and **shared with every annotator**.
-Built-in templates cover:
+The UI is defined by a Label Studio-style XML config, edited by admins in
+**Labeling Setup** (editor + templates + live preview + validation) and shared
+with all annotators. Built-in templates: Classification (`<Choices>`), NER
+(`<Labels>`), Relation Extraction (`<Labels>` + `<Relations>`), Aspect-Based
+Sentiment, and Summarization (`<TextArea>`).
 
-- **Classification** (`<Choices>`)
-- **Named Entity Recognition** (`<Labels>`)
-- **Relation Extraction** (`<Labels>` + `<Relations>`)
-- **Aspect-Based Sentiment** (`<Labels>` aspects + `<Choices perRegion>`)
-- **Summarization** (`<TextArea>`)
-
-Supported tags: object `<Text value="$field">`; controls `<Labels>/<Label>`,
-`<Choices>/<Choice>`, `<TextArea>`, `<Rating>`, `<Relations>/<Relation>`
-(linked to objects via `toName`, with optional `perRegion="true"`); layout
-`<View>` and `<Header>`. The project default config lives in
+Supported tags: `<Text value="$field">`; `<Labels>`, `<Choices>`, `<TextArea>`,
+`<Rating>`, `<Relations>` (linked via `toName`, optional `perRegion="true"`); and
+`<View>` / `<Header>` for layout. The default config is in
 `src/config/labeling.json`.
 
-Imports accept `.csv`/`.xlsx` (a `text` or `raw_text` column) or a Label Studio
-`.json` export; exports round-trip back through import.
+Imports take `.csv`/`.xlsx` (a `text` or `raw_text` column) or a Label Studio
+`.json` export. Exports round-trip back through import.
 
 ## Accounts
 
-There are two tiers: **annotator** (default) and **admin**. There is no public
-sign-up — admins provision accounts. Two ways to create them:
+Two roles: `annotator` (default) and `admin`. There's no public sign-up — admins
+create accounts. Everyone logs in by email.
 
-- **Seed script** (bootstrap the first admin):
+Create the first admin with the seed script:
 
-  ```bash
-  node scripts/seed_db.mjs --email you@example.com --password 'secret' --role admin
-  ```
+```bash
+node scripts/seed_db.mjs --email you@example.com --password 'secret' --role admin
+```
 
-  The script also imports any accounts from `src/config/accounts.json` (existing
-  PBKDF2 hashes are preserved), so prior accounts keep working.
-
-- **In-app**, after an admin logs in — the **Create Account** button (with a tier
-  selector). These are written to the database and work from anywhere the
-  instance is reachable.
-
-Everyone logs in by email.
+The script also imports accounts from `src/config/accounts.json` (PBKDF2 hashes
+are preserved). After that, admins can add accounts in-app with **Create
+Account**.
 
 ## Development
 
@@ -95,25 +79,21 @@ npm run dev
 npm install
 npm run build
 node scripts/seed_db.mjs --email you@example.com --password 'secret' --role admin
-npm run start   # next start; put nginx in front for TLS / a public URL
+npm run start   # put nginx in front for TLS / a public URL
 ```
 
-### Deployment requirements & gotchas
+Things to watch out for:
 
-- **Runs as a Node process** (`next start`), not static files — the host must
-  allow a long-lived process listening on a port.
-- **Single instance only.** SQLite is single-writer; do **not** run multiple
-  replicas / PM2 cluster mode against the same database file.
-- **`DATA_DIR`** must point at a writable, **persistent** directory (not scratch
-  space that's wiped between jobs). Back up by copying `annotation.db`.
-- **HTTPS vs HTTP — important.** The login cookie is `Secure` (HTTPS-only) by
-  default. If the instance is served over plain `http://` (e.g. an internal
-  cluster URL with no TLS), login will silently fail — set `INSECURE_COOKIES=true`
-  for that case. Prefer real HTTPS (nginx in front) when possible.
-- **Native module:** `better-sqlite3` is compiled; build on the cluster, or run
-  `npm rebuild better-sqlite3` after copying the project between machines.
-- **nginx body size:** project uploads POST the whole file as JSON — raise
-  `client_max_body_size` (e.g. `50m`) so large datasets aren't rejected.
-- **Subpath:** the app expects to live at a domain root or subdomain. Serving it
-  under a path prefix (e.g. `/lab/annotate`) needs extra work and is not
-  supported out of the box.
+- **One instance only.** SQLite is single-writer, so don't run multiple replicas
+  (or PM2 cluster mode) against the same database.
+- **`DATA_DIR`** must be a writable, persistent directory — not scratch space
+  that gets wiped.
+- **HTTPS vs HTTP.** The login cookie is `Secure` (HTTPS-only) by default. Over
+  plain `http://`, login silently fails — set `INSECURE_COOKIES=true` in that
+  case, but prefer real HTTPS.
+- **Native module.** `better-sqlite3` is compiled; build on the target machine,
+  or run `npm rebuild better-sqlite3` after copying the project.
+- **nginx body size.** Uploads POST the whole file as JSON, so raise
+  `client_max_body_size` (e.g. `50m`).
+- **No subpath.** The app expects a domain root or subdomain, not a path prefix
+  like `/lab/annotate`.
