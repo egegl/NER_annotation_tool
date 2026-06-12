@@ -81,19 +81,3 @@ npm run build
 node scripts/seed_db.mjs --email you@example.com --password 'secret' --role admin
 npm run start   # put nginx in front for TLS / a public URL
 ```
-
-Things to watch out for:
-
-- **One instance only.** SQLite is single-writer, so don't run multiple replicas
-  (or PM2 cluster mode) against the same database.
-- **`DATA_DIR`** must be a writable, persistent directory, not scratch space
-  that gets wiped.
-- **HTTPS vs HTTP.** The login cookie is `Secure` (HTTPS-only) by default. Over
-  plain `http://`, login silently fails, so set `INSECURE_COOKIES=true` in that
-  case. Prefer real HTTPS.
-- **Native module.** `better-sqlite3` is compiled; build on the target machine,
-  or run `npm rebuild better-sqlite3` after copying the project.
-- **nginx body size.** Uploads POST the whole file as JSON, so raise
-  `client_max_body_size` (e.g. `50m`).
-- **No subpath.** The app expects a domain root or subdomain, not a path prefix
-  like `/lab/annotate`.
