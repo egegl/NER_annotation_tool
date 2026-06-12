@@ -1,0 +1,3 @@
+{
+  "xml": "<View>\n  <Labels name=\"label\" toName=\"text\">\n    <Label value=\"Person\" />\n    <Label value=\"Organization\" />\n    <Label value=\"Location\" />\n  </Labels>\n  <Text name=\"text\" value=\"$text\" />\n</View>\n"
+}

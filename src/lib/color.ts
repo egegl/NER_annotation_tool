@@ -1,28 +1,49 @@
 import { LabelColor } from "@/types";
 
-const PRESET_COLORS: LabelColor[] = [
-  { bg: 'bg-red-500/30', text: 'text-red-900', border: 'border-red-500', indicator: 'bg-red-500' },
-  { bg: 'bg-blue-500/30', text: 'text-blue-900', border: 'border-blue-500', indicator: 'bg-blue-500' },
-  { bg: 'bg-green-500/30', text: 'text-green-900', border: 'border-green-500', indicator: 'bg-green-500' },
-  { bg: 'bg-yellow-500/30', text: 'text-yellow-900', border: 'border-yellow-500', indicator: 'bg-yellow-500' },
-  { bg: 'bg-purple-500/30', text: 'text-purple-900', border: 'border-purple-500', indicator: 'bg-purple-500' },
-  { bg: 'bg-orange-500/30', text: 'text-orange-900', border: 'border-orange-500', indicator: 'bg-orange-500' },
-  { bg: 'bg-pink-500/30', text: 'text-pink-900', border: 'border-pink-500', indicator: 'bg-pink-500' },
-  { bg: 'bg-indigo-500/30', text: 'text-indigo-900', border: 'border-indigo-500', indicator: 'bg-indigo-500' },
-  { bg: 'bg-gray-500/30', text: 'text-gray-900', border: 'border-gray-500', indicator: 'bg-gray-500' },
-  { bg: 'bg-cyan-500/30', text: 'text-cyan-900', border: 'border-cyan-500', indicator: 'bg-cyan-500' },
-  { bg: 'bg-lime-500/30', text: 'text-lime-900', border: 'border-lime-500', indicator: 'bg-lime-500' },
-  { bg: 'bg-emerald-500/30', text: 'text-emerald-900', border: 'border-emerald-500', indicator: 'bg-emerald-500' },
-  { bg: 'bg-teal-500/30', text: 'text-teal-900', border: 'border-teal-500', indicator: 'bg-teal-500' },
-
+// Preset palette (hex). Cycled through for labels/choices without an explicit
+// `background` attribute.
+const PRESET_HEX: string[] = [
+  '#ef4444', // red
+  '#3b82f6', // blue
+  '#22c55e', // green
+  '#eab308', // yellow
+  '#a855f7', // purple
+  '#f97316', // orange
+  '#ec4899', // pink
+  '#6366f1', // indigo
+  '#6b7280', // gray
+  '#06b6d4', // cyan
+  '#84cc16', // lime
+  '#10b981', // emerald
+  '#14b8a6', // teal
 ];
 
+const toRgb = (hex: string): [number, number, number] | null => {
+  let h = hex.trim().replace(/^#/, '');
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+  return [
+    parseInt(h.slice(0, 2), 16),
+    parseInt(h.slice(2, 4), 16),
+    parseInt(h.slice(4, 6), 16),
+  ];
+};
 
+const buildColor = (r: number, g: number, b: number): LabelColor => ({
+  solid: `rgb(${r}, ${g}, ${b})`,
+  bg: `rgba(${r}, ${g}, ${b}, 0.25)`,
+  // Darkened for readability over the translucent fill on a light surface.
+  text: `rgb(${Math.round(r * 0.45)}, ${Math.round(g * 0.45)}, ${Math.round(b * 0.45)})`,
+});
+
+/** Color for the Nth label/choice from the preset palette. */
 export function generateColor(index: number): LabelColor {
-  // Cycle through the preset colors
-  return PRESET_COLORS[index % PRESET_COLORS.length];
+  const rgb = toRgb(PRESET_HEX[index % PRESET_HEX.length])!;
+  return buildColor(...rgb);
 }
 
-    
-    
-    
+/** Build a color from a custom `background` value (hex). Falls back to gray. */
+export function parseColor(input: string): LabelColor {
+  const rgb = toRgb(input);
+  return rgb ? buildColor(...rgb) : buildColor(107, 114, 128);
+}

@@ -72,9 +72,12 @@ def add_account(args: argparse.Namespace) -> None:
     if args.username in users and not args.force:
         raise ValueError(f"Account already exists: {args.username}")
 
-    users[args.username] = derive_password(read_password(args), args.iterations)
+    users[args.username] = {
+        "role": args.role,
+        **derive_password(read_password(args), args.iterations),
+    }
     save_config(config)
-    print(f"Saved account: {args.username}")
+    print(f"Saved {args.role} account: {args.username}")
 
 
 def remove_account(args: argparse.Namespace) -> None:
@@ -92,7 +95,8 @@ def remove_account(args: argparse.Namespace) -> None:
 def list_accounts(_: argparse.Namespace) -> None:
     config = load_config()
     for username in sorted(config["users"]):
-        print(username)
+        role = config["users"][username].get("role", "annotator")
+        print(f"{username}\t{role}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -101,6 +105,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_parser = subparsers.add_parser("add", help="Create or update an account")
     add_parser.add_argument("username")
+    add_parser.add_argument(
+        "--role",
+        choices=["annotator", "admin"],
+        default="annotator",
+        help="Account tier (default: annotator)",
+    )
     add_parser.add_argument("--password", help="Password to set; omit to enter securely")
     add_parser.add_argument("--iterations", type=int, default=DEFAULT_ITERATIONS)
     add_parser.add_argument("--force", action="store_true", help="Overwrite an existing account")
