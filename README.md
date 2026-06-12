@@ -10,9 +10,9 @@ work; the admin exports whichever annotators they want.
 The app is a Node server (`next start`) backed by one SQLite file. State lives in
 the database, not the browser. The main tables:
 
-- `project` / `tasks` — the uploaded project and its rows.
-- `annotations` — each user's results, keyed by `(task, user)`.
-- `users` / `sessions` — accounts and httpOnly cookie sessions.
+- `project` / `tasks`: the uploaded project and its rows.
+- `annotations`: each user's results, keyed by `(task, user)`.
+- `users` / `sessions`: accounts and httpOnly cookie sessions.
 
 The database is at `DATA_DIR/annotation.db` (default `./data/annotation.db`). To
 back it up, copy that file.
@@ -52,8 +52,8 @@ Imports take `.csv`/`.xlsx` (a `text` or `raw_text` column) or a Label Studio
 
 ## Accounts
 
-Two roles: `annotator` (default) and `admin`. There's no public sign-up — admins
-create accounts. Everyone logs in by email.
+Two roles: `annotator` (default) and `admin`. There's no public sign-up, so
+admins create accounts. Everyone logs in by email.
 
 Create the first admin with the seed script:
 
@@ -86,11 +86,11 @@ Things to watch out for:
 
 - **One instance only.** SQLite is single-writer, so don't run multiple replicas
   (or PM2 cluster mode) against the same database.
-- **`DATA_DIR`** must be a writable, persistent directory — not scratch space
+- **`DATA_DIR`** must be a writable, persistent directory, not scratch space
   that gets wiped.
 - **HTTPS vs HTTP.** The login cookie is `Secure` (HTTPS-only) by default. Over
-  plain `http://`, login silently fails — set `INSECURE_COOKIES=true` in that
-  case, but prefer real HTTPS.
+  plain `http://`, login silently fails, so set `INSECURE_COOKIES=true` in that
+  case. Prefer real HTTPS.
 - **Native module.** `better-sqlite3` is compiled; build on the target machine,
   or run `npm rebuild better-sqlite3` after copying the project.
 - **nginx body size.** Uploads POST the whole file as JSON, so raise
