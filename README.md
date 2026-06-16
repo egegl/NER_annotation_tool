@@ -47,8 +47,10 @@ Supported tags: `<Text value="$field">`; `<Labels>`, `<Choices>`, `<TextArea>`,
 `<View>` / `<Header>` for layout. The default config is in
 `src/config/labeling.json`.
 
-Imports take `.csv`/`.xlsx` (a `text` or `raw_text` column) or a Label Studio
-`.json` export. Exports round-trip back through import.
+Imports take `.csv`/`.xlsx` or a Label Studio `.json` export. After parsing, the
+admin is asked which column holds the main text to annotate (the choice is
+mirrored into `$text`, which the config references); `text`/`raw_text` columns are
+pre-selected automatically. Exports round-trip back through import.
 
 ## Accounts
 
