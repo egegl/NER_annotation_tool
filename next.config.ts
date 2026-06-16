@@ -1,10 +1,10 @@
 import type {NextConfig} from 'next';
 
-// Subpath the app is served under behind nginx, e.g. BASE_PATH=/bozlablabelapp
-// for sesame.bmi.emory.edu/bozlablabelapp/. Empty (the local terminal-launch
-// workflow) serves at the domain root. Set this at BUILD time, since both
-// `basePath` and the client-inlined NEXT_PUBLIC_BASE_PATH are baked into the
-// build. Trailing slash is trimmed so the value is a clean '/foo'.
+// Subpath the app is served under behind a reverse proxy, e.g.
+// BASE_PATH=/myapp for https://example.com/myapp/. Empty (the local
+// terminal-launch workflow) serves at the domain root. Set this at BUILD time,
+// since both `basePath` and the client-inlined NEXT_PUBLIC_BASE_PATH are baked
+// into the build. Trailing slash is trimmed so the value is a clean '/foo'.
 const basePath = (process.env.BASE_PATH || '').replace(/\/+$/, '');
 
 const nextConfig: NextConfig = {

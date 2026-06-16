@@ -30,9 +30,8 @@ const useSecureCookie =
 /**
  * Scope the session cookie to the app's basePath so it doesn't collide with
  * another instance of this tool served under a different subpath on the same
- * host (e.g. the original `bmilabelapp` and this `bozlablabelapp` both on
- * sesame.bmi.emory.edu would otherwise share a `/`-scoped cookie of the same
- * name). Defaults to '/' for the root (local) deployment.
+ * host (two instances at different subpaths would otherwise share a `/`-scoped
+ * cookie of the same name). Defaults to '/' for the root (local) deployment.
  */
 const COOKIE_PATH = (process.env.BASE_PATH || '').replace(/\/+$/, '') || '/';
 
