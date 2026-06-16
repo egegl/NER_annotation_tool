@@ -30,6 +30,30 @@ interface ReadingPrefs {
 
 const DEFAULT_PREFS: ReadingPrefs = { fontSize: 15, lineHeight: 1.8, maxWidth: null };
 
+/** Render a literal slice of the note text, inserting a visual line break after
+ * any run of 3+ consecutive spaces (clinical exports often use runs of spaces
+ * where a line break was lost). The space characters are kept in the DOM — only
+ * a <br>, which contributes no characters to Range.toString(), is added — so
+ * annotation offsets and the exported text are unaffected. */
+function withLineBreaks(str: string, keyBase: string): React.ReactNode[] {
+  if (!str.includes('   ')) return [str];
+  const re = / {3,}/g;
+  const nodes: React.ReactNode[] = [];
+  let last = 0;
+  let n = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(str)) !== null) {
+    const end = m.index + m[0].length;
+    // Keep the text up to and including the spaces, then break the line. The
+    // trailing spaces sit at the end of the line, so they stay invisible.
+    nodes.push(str.slice(last, end));
+    nodes.push(<br key={`${keyBase}-br-${n++}`} />);
+    last = end;
+  }
+  if (last < str.length) nodes.push(str.slice(last));
+  return nodes;
+}
+
 export function TextObject({ object }: { object: ObjectTag }) {
   const {
     config,
@@ -216,7 +240,7 @@ export function TextObject({ object }: { object: ObjectTag }) {
     const nodes: React.ReactNode[] = [];
     let cur = from;
     for (const mk of marks) {
-      if (mk.start > cur) nodes.push(text.substring(cur, mk.start));
+      if (mk.start > cur) nodes.push(...withLineBreaks(text.substring(cur, mk.start), `p-${cur}`));
       const content = text.substring(mk.start, mk.end);
       if (mk.kind === 'search') {
         const isCur = mk.idx === currentMatch;
@@ -229,7 +253,7 @@ export function TextObject({ object }: { object: ObjectTag }) {
               isCur ? 'bg-amber-400 ring-2 ring-amber-500' : 'bg-yellow-200',
             )}
           >
-            {content}
+            {withLineBreaks(content, `s-${mk.start}`)}
           </mark>,
         );
       } else {
@@ -238,13 +262,13 @@ export function TextObject({ object }: { object: ObjectTag }) {
             key={`k-${mk.start}`}
             className="rounded-sm bg-transparent text-inherit underline decoration-2 decoration-sky-500 underline-offset-2"
           >
-            {content}
+            {withLineBreaks(content, `k-${mk.start}`)}
           </mark>,
         );
       }
       cur = mk.end;
     }
-    if (cur < to) nodes.push(text.substring(cur, to));
+    if (cur < to) nodes.push(...withLineBreaks(text.substring(cur, to), `p-${cur}`));
     return nodes;
   };
 
@@ -276,7 +300,7 @@ export function TextObject({ object }: { object: ObjectTag }) {
           }}
           title={labelValue}
         >
-          {text.substring(s, e)}
+          {withLineBreaks(text.substring(s, e), region.id)}
         </span>,
       );
       last = e;
