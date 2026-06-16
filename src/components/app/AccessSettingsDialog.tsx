@@ -32,6 +32,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Trash2, UserPlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { api } from '@/lib/basePath';
 import { useToast } from '@/hooks/use-toast';
 
 type Role = 'admin' | 'annotator';
@@ -73,7 +74,7 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail }: Props
   const loadUsers = useCallback(async () => {
     setListError('');
     try {
-      const res = await fetch('/api/admin/users');
+      const res = await fetch(api('/api/admin/users'));
       const result = await res.json();
       if (!res.ok) throw new Error(result.error ?? 'Could not load accounts.');
       setUsers(result.users as UserItem[]);
@@ -109,7 +110,7 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail }: Props
 
     setIsCreating(true);
     try {
-      const res = await fetch('/api/admin/users', {
+      const res = await fetch(api('/api/admin/users'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, role }),
@@ -130,7 +131,7 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail }: Props
     if (!pendingDelete) return;
     setIsDeleting(true);
     try {
-      const res = await fetch('/api/admin/users', {
+      const res = await fetch(api('/api/admin/users'), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: pendingDelete.id }),

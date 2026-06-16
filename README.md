@@ -83,3 +83,29 @@ npm run build
 node scripts/seed_db.mjs --email you@example.com --password 'secret' --role admin
 npm run start   # put nginx in front for TLS / a public URL
 ```
+
+This is a Node server, **not** a static export — it must run as a long-lived
+process (`next start`). It cannot be served as static files.
+
+### Behind a reverse proxy at a subpath
+
+When nginx serves the app under a path prefix (e.g.
+`https://sesame.bmi.emory.edu/bozlablabelapp/`), set `BASE_PATH` **at build
+time** — it's baked into the build (both Next's `basePath` and the client-side
+`NEXT_PUBLIC_BASE_PATH` used to prefix `fetch()` calls), and is also read at
+runtime to scope the session cookie to that path:
+
+```bash
+export DATA_DIR=/labs/bozkurtlab/annotation-tool/data   # shared SQLite db
+export BASE_PATH=/bozlablabelapp                          # nginx path prefix
+export NODE_ENV=production                                # enables Secure cookies
+# Do NOT set INSECURE_COOKIES when TLS is terminated at the proxy.
+
+npm run build
+npm run start -- -H 0.0.0.0 -p 3000
+```
+
+nginx then proxies `/bozlablabelapp/` to the Node server. Only **one** server
+process may run against a given `DATA_DIR` (see the note in
+`launch_annotator.sh`). Leave `BASE_PATH` unset to serve at the domain root
+(the local terminal-launch workflow).
