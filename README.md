@@ -84,7 +84,7 @@ node scripts/seed_db.mjs --email you@example.com --password 'secret' --role admi
 npm run start   # put nginx in front for TLS / a public URL
 ```
 
-This is a Node server, **not** a static export — it must run as a long-lived
+This is a Node server, so it must run as a long-lived
 process (`next start`). It cannot be served as static files.
 
 ### Behind a reverse proxy at a subpath
