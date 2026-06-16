@@ -45,13 +45,15 @@ const stringifyRow = (
 };
 
 /** Distinct column keys present across rows, in first-seen order. The
- * `annotations` round-trip column is excluded — it is not annotatable text. */
+ * `annotations` round-trip column is excluded — it is not annotatable text — as
+ * are blank/whitespace-only headers (e.g. an unnamed trailing CSV column), which
+ * aren't selectable as text or ID and break value-keyed pickers. */
 export const columnsOf = (rows: Record<string, unknown>[]): string[] => {
   const cols: string[] = [];
   const seen = new Set<string>();
   for (const row of rows) {
     for (const key of Object.keys(row)) {
-      if (key === 'annotations' || seen.has(key)) continue;
+      if (key === 'annotations' || key.trim() === '' || seen.has(key)) continue;
       seen.add(key);
       cols.push(key);
     }
