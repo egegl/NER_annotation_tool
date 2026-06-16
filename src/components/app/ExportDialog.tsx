@@ -14,6 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { FileDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { api } from '@/lib/basePath';
 
 interface UserListItem {
   id: number;
@@ -41,7 +42,7 @@ export function ExportDialog({ open, onOpenChange }: Props) {
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    fetch('/api/admin/users')
+    fetch(api('/api/admin/users'))
       .then((r) => r.json())
       .then((data) => {
         const list: UserListItem[] = data.users ?? [];
@@ -67,7 +68,7 @@ export function ExportDialog({ open, onOpenChange }: Props) {
   const handleExport = async (format: 'json' | 'csv') => {
     setExporting(true);
     try {
-      const response = await fetch('/api/export', {
+      const response = await fetch(api('/api/export'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userIds: Array.from(selected), format }),

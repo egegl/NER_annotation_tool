@@ -29,6 +29,7 @@ import {
 } from '@/lib/io';
 import type { LSTask } from '@/lib/io';
 import { cn } from '@/lib/utils';
+import { api } from '@/lib/basePath';
 import defaultLabeling from '@/config/labeling.json';
 import {
     AlertDialog,
@@ -85,8 +86,8 @@ export default function AnnotatePage() {
     /** Load the shared project + this user's own annotations into the UI. */
     const loadProject = useCallback(async () => {
         const [projectRes, annRes] = await Promise.all([
-            fetch('/api/project'),
-            fetch('/api/annotations'),
+            fetch(api('/api/project')),
+            fetch(api('/api/annotations')),
         ]);
         const projectData = await projectRes.json();
         const annData = await annRes.json();
@@ -114,7 +115,7 @@ export default function AnnotatePage() {
     useEffect(() => {
         (async () => {
             try {
-                const meRes = await fetch('/api/auth/me');
+                const meRes = await fetch(api('/api/auth/me'));
                 if (!meRes.ok) {
                     router.push('/');
                     return;
@@ -146,7 +147,7 @@ export default function AnnotatePage() {
     /** Persist one task's results for the current user (server keys it by session). */
     const saveAnnotation = useCallback(async (taskId: number, results: AnnotationResult[]) => {
         try {
-            const res = await fetch('/api/annotations', {
+            const res = await fetch(api('/api/annotations'), {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ taskId, results }),
@@ -167,7 +168,7 @@ export default function AnnotatePage() {
 
     const handleLogout = async () => {
         try {
-            await fetch('/api/auth/logout', { method: 'POST' });
+            await fetch(api('/api/auth/logout'), { method: 'POST' });
         } catch (error) {
             console.error('Could not log out', error);
         }
@@ -180,7 +181,7 @@ export default function AnnotatePage() {
         setConfigXml(xml);
         if (projectExists) {
             try {
-                const res = await fetch('/api/project', {
+                const res = await fetch(api('/api/project'), {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ configXml: xml }),
@@ -282,7 +283,7 @@ export default function AnnotatePage() {
     /** Admin: push the parsed project to the server (shared with all annotators). */
     const uploadProject = async (cases: CaseData[], name: string) => {
         try {
-            const res = await fetch('/api/project', {
+            const res = await fetch(api('/api/project'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ fileName: name, configXml, cases }),

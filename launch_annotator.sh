@@ -11,6 +11,15 @@
 # The rebuild is skipped when the current commit is already built and the
 # working tree is clean, so re-launching without a new pull is near-instant.
 #
+# IMPORTANT — run ONE shared server, not one per person.
+#   The SQLite database in DATA_DIR must only ever be opened by a single server
+#   process. SQLite's file locking is unreliable across hosts on a network
+#   filesystem, so several people each launching their own server against the
+#   shared database causes login errors and risks corrupting annotations.
+#   Instead, one person launches this once; everyone else opens the printed
+#   http://<hostname>:<port> URL in their browser. The server binds to all
+#   interfaces (0.0.0.0) so other nodes on the cluster network can reach it.
+#
 # Usage:
 #   git pull
 #   ./launch_annotator.sh [port]
@@ -113,13 +122,23 @@ fi
 mkdir -p "$DATA_DIR"
 export INSECURE_COOKIES=true
 
+# Best-effort fully-qualified hostname so the banner shows a URL other nodes can
+# reach. Falls back to the short hostname if -f isn't supported.
+HOSTNAME_FQDN="$(hostname -f 2>/dev/null || hostname)"
+
 cat <<EOF
 
 ============================================================
   Data dir: $DATA_DIR
 
-  Open this in a browser ON THE SAME node (e.g. inside a
-  Cluster Desktop session):
+  This is the SHARED server. Run only one of these against
+  the shared database. Share this URL with the other
+  annotators (they open it in their own browser — they do
+  NOT run this script):
+
+      http://${HOSTNAME_FQDN}:${PORT}
+
+  On this same machine you can also use:
 
       http://localhost:${PORT}
 
@@ -130,4 +149,6 @@ cat <<EOF
 
 EOF
 
-exec node_modules/.bin/next start -p "$PORT"
+# Bind to 0.0.0.0 so annotators on other cluster nodes can reach this single
+# shared server over the network, rather than each launching their own.
+exec node_modules/.bin/next start -H 0.0.0.0 -p "$PORT"

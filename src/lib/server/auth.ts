@@ -27,6 +27,15 @@ export const DEFAULT_ITERATIONS = 200000;
 const useSecureCookie =
   process.env.NODE_ENV === 'production' && process.env.INSECURE_COOKIES !== 'true';
 
+/**
+ * Scope the session cookie to the app's basePath so it doesn't collide with
+ * another instance of this tool served under a different subpath on the same
+ * host (e.g. the original `bmilabelapp` and this `bozlablabelapp` both on
+ * sesame.bmi.emory.edu would otherwise share a `/`-scoped cookie of the same
+ * name). Defaults to '/' for the root (local) deployment.
+ */
+const COOKIE_PATH = (process.env.BASE_PATH || '').replace(/\/+$/, '') || '/';
+
 interface UserRow {
   id: number;
   email: string;
@@ -98,7 +107,7 @@ export const createSession = async (userId: number) => {
     httpOnly: true,
     sameSite: 'lax',
     secure: useSecureCookie,
-    path: '/',
+    path: COOKIE_PATH,
     expires: expiresAt,
   });
 };
@@ -110,7 +119,8 @@ export const destroySession = async () => {
   if (token) {
     getDb().prepare('DELETE FROM sessions WHERE token = ?').run(token);
   }
-  store.delete(SESSION_COOKIE);
+  // Must clear at the same path it was set, or the browser keeps the cookie.
+  store.delete({ name: SESSION_COOKIE, path: COOKIE_PATH });
 };
 
 /** Resolve the logged-in user from the session cookie, or null. */
