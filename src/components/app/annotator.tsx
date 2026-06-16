@@ -16,9 +16,11 @@ interface AnnotatorProps {
   caseData: CaseData;
   config: ParsedConfig;
   onChange: (results: AnnotationResult[]) => void;
+  /** True in the admin config preview: hides annotator-only tools (search etc.). */
+  previewMode?: boolean;
 }
 
-export function Annotator({ caseData, config, onChange }: AnnotatorProps) {
+export function Annotator({ caseData, config, onChange, previewMode = false }: AnnotatorProps) {
   if (!config.valid) {
     return (
       <Card className="shadow-lg">
@@ -105,7 +107,7 @@ export function Annotator({ caseData, config, onChange }: AnnotatorProps) {
   );
 
   return (
-    <AnnotatorProvider config={config} caseData={caseData} onChange={onChange}>
+    <AnnotatorProvider config={config} caseData={caseData} onChange={onChange} previewMode={previewMode}>
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Annotate</CardTitle>

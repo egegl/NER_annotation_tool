@@ -142,6 +142,7 @@ export function ProjectSettingsDialog({ open, onOpenChange, currentXml, onSave, 
                   caseData={sampleCase}
                   config={parsed}
                   onChange={setPreviewResults}
+                  previewMode
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">Fix the configuration to preview it.</p>

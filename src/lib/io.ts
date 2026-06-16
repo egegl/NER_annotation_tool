@@ -74,19 +74,62 @@ export const columnSamples = (
   return samples;
 };
 
-/** Suggest which column is most likely the main text, by common conventions. */
-export const guessTextColumn = (columns: string[]): string | undefined =>
-  columns.find((c) => c === 'text') ??
-  columns.find((c) => c === 'raw_text') ??
-  columns.find((c) => /text/i.test(c)) ??
-  columns[0];
+/** Split a column header into word tokens, breaking on non-alphanumerics AND
+ * camelCase / acronym boundaries: `note_id` -> [note, id], `noteID` ->
+ * [note, ID], `RecordID` -> [Record, ID], `PatientGUID` -> [Patient, GUID]. */
+const headerTokens = (name: string): string[] =>
+  name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2') // camelCase boundary
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2') // ACRONYMWord boundary
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean);
+
+/** Suggest which column holds the record ID. Scans columns left-to-right and
+ * returns the first whose name contains "id" as a whole word — so `ID`, `id`,
+ * `note_id`, `Note ID`, `patient_id`, `noteID`, and `RecordID` all match, while
+ * `width`, `valid`, `candidate`, `idx`, and `guid` do not. Returns undefined
+ * when nothing looks like an ID, so callers can fall back to auto-numbering. */
+export const guessIdColumn = (columns: string[]): string | undefined =>
+  columns.find((c) => headerTokens(c).some((t) => t.toLowerCase() === 'id'));
+
+/** Suggest which column is most likely the main text. Honors the explicit
+ * `text`/`raw_text` conventions first; otherwise picks the column with the
+ * longest sample content, which is almost always the free-text field (e.g. an
+ * EHR `clinical_note`) rather than an ID, code, or category. Length beats fuzzy
+ * name matching, which trips on columns like `note_id`. */
+export const guessTextColumn = (
+  columns: string[],
+  samples: Record<string, string> = {},
+): string | undefined => {
+  const exact =
+    columns.find((c) => c === 'text') ?? columns.find((c) => c === 'raw_text');
+  if (exact) return exact;
+
+  const byLength = [...columns].sort(
+    (a, b) => (samples[b]?.length ?? 0) - (samples[a]?.length ?? 0),
+  );
+  return byLength[0] ?? columns[0];
+};
+
+/** Resolve a row's external ID from the chosen `idField`:
+ *   - `undefined` -> legacy behavior: use a column literally named `ID`;
+ *   - `''`        -> none: ignore any ID column and let the caller auto-number;
+ *   - a column    -> use that column's (trimmed) value.
+ * Returns `''` when there's no usable value, signalling "auto-number me". */
+const resolveId = (data: Record<string, string>, idField?: string): string => {
+  const raw =
+    idField === undefined ? data.ID : idField === '' ? undefined : data[idField];
+  return (raw ?? '').trim();
+};
 
 /** Build cases from parsed CSV/XLSX rows. `textField` names the column holding
- * the text to annotate. An `annotations` column (JSON array) is parsed back into
- * results so CSV exports round-trip. */
+ * the text to annotate; `idField` names the column holding the record ID (see
+ * `resolveId`). An `annotations` column (JSON array) is parsed back into results
+ * so CSV exports round-trip. */
 export const rowsToCases = (
   rows: Record<string, unknown>[],
   textField?: string,
+  idField?: string,
 ): CaseData[] =>
   rows
     .map((row, i) => {
@@ -101,19 +144,26 @@ export const rowsToCases = (
         }
       }
       delete data.annotations;
-      return { ID: data.ID || `case-${i + 1}`, data, results };
+      return { ID: resolveId(data, idField) || `case-${i + 1}`, data, results };
     })
     .filter((c) => (c.data.text ?? '').length > 0);
 
 /** Build cases from a Label Studio task JSON export (round-trip / re-import).
- * `textField` names the data field holding the text to annotate. */
-export const tasksToCases = (tasks: LSTask[], textField?: string): CaseData[] =>
+ * `textField` names the data field holding the text to annotate; `idField`
+ * names the data field holding the record ID (see `resolveId`). */
+export const tasksToCases = (
+  tasks: LSTask[],
+  textField?: string,
+  idField?: string,
+): CaseData[] =>
   tasks
     .map((task, i) => {
       const data = stringifyRow(task.data ?? {}, textField);
       const results =
         task.annotations?.[0]?.result ?? task.predictions?.[0]?.result ?? [];
-      const ID = data.ID || (task.id != null ? String(task.id) : `case-${i + 1}`);
+      const ID =
+        resolveId(data, idField) ||
+        (task.id != null ? String(task.id) : `case-${i + 1}`);
       return { ID, data, results };
     })
     .filter((c) => (c.data.text ?? '').length > 0);

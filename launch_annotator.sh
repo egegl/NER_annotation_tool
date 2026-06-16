@@ -5,8 +5,11 @@
 # Launcher for the BMI Annotation Tool on the cluster.
 #
 # Run this AFTER `git pull`: it reinstalls dependencies when they change,
-# rebuilds the app so your pulled code actually goes live, then starts the
-# server connected to the shared database.
+# rebuilds the app when the code changed so your pulled code actually goes live,
+# then starts the server connected to the shared database.
+#
+# The rebuild is skipped when the current commit is already built and the
+# working tree is clean, so re-launching without a new pull is near-instant.
 #
 # Usage:
 #   git pull
@@ -14,7 +17,7 @@
 #
 # Environment overrides:
 #   DATA_DIR=/some/path     where the shared SQLite database lives
-#   SKIP_BUILD=1            start the existing build without rebuilding
+#   SKIP_BUILD=1            start the existing build, even if the code changed
 # ---------------------------------------------------------------------------
 
 set -eo pipefail
@@ -64,19 +67,41 @@ else
     echo ">> Dependencies up to date; skipping npm install."
 fi
 
-# ---- 5. Build --------------------------------------------------------------
-# Always rebuild after a pull so the new code is served. This is the key
-# difference from a build that only runs when .next is missing: an existing
-# .next from a previous version would otherwise serve stale code.
+# ---- 5. Build (skip when the current commit is already built) --------------
+# We stamp each successful build with the git commit it was built from
+# (.next/.built-commit). On the next launch we rebuild only when that stamp is
+# missing/stale or the working tree has uncommitted changes — so re-running the
+# launcher without a fresh `git pull` is near-instant, while a pull (new HEAD)
+# or local edits still force a rebuild and never serve stale code.
+STAMP_FILE="$PROJECT_DIR/.next/.built-commit"
+
+# The commit we'd build from, but only when the tree is clean. A dirty tree
+# leaves this empty, which forces a rebuild (uncommitted edits aren't a commit).
+BUILD_COMMIT=""
+if git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+   && [ -z "$(git -C "$PROJECT_DIR" status --porcelain)" ]; then
+    BUILD_COMMIT="$(git -C "$PROJECT_DIR" rev-parse HEAD)"
+fi
+
 if [ "${SKIP_BUILD:-0}" = "1" ]; then
     echo ">> SKIP_BUILD=1 set; using existing build."
     if [ ! -d .next ]; then
         echo "ERROR: no .next build found, but SKIP_BUILD=1 was set." >&2
         exit 1
     fi
+elif [ -n "$BUILD_COMMIT" ] && [ -d .next ] && [ -f "$STAMP_FILE" ] \
+     && [ "$(cat "$STAMP_FILE")" = "$BUILD_COMMIT" ]; then
+    echo ">> Build already up to date for commit ${BUILD_COMMIT:0:12}; skipping build."
 else
     echo ">> Building the app..."
     npm run build
+    # Stamp the build so the next launch can detect it's current. Skipped when
+    # the tree is dirty or not a git checkout (BUILD_COMMIT empty), so those
+    # always rebuild next time.
+    if [ -n "$BUILD_COMMIT" ]; then
+        echo "$BUILD_COMMIT" > "$STAMP_FILE"
+        echo ">> Stamped build as commit ${BUILD_COMMIT:0:12}."
+    fi
 fi
 
 # ---- 6. Launch -------------------------------------------------------------

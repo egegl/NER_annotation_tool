@@ -9,11 +9,13 @@ import Papa from 'papaparse';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileUp, FileDown, ChevronLeft, ChevronRight, FileText, UploadCloud, LogOut, Settings2, Check, UserPlus } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
+import { FileUp, FileDown, ChevronLeft, ChevronRight, FileText, UploadCloud, LogOut, Settings2, Check, Users, SkipForward } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Annotator } from '@/components/app/annotator';
 import { ProjectSettingsDialog } from '@/components/app/ProjectSettingsDialog';
-import { AdminCreateAccountDialog } from '@/components/app/AdminCreateAccountDialog';
+import { AccessSettingsDialog } from '@/components/app/AccessSettingsDialog';
 import { ExportDialog } from '@/components/app/ExportDialog';
 import { SelectTextColumnDialog } from '@/components/app/SelectTextColumnDialog';
 import { parseLabelConfig } from '@/lib/labelConfig';
@@ -23,6 +25,7 @@ import {
     columnsOf,
     columnSamples,
     guessTextColumn,
+    guessIdColumn,
 } from '@/lib/io';
 import type { LSTask } from '@/lib/io';
 import { cn } from '@/lib/utils';
@@ -50,7 +53,7 @@ export default function AnnotatePage() {
     const [configXml, setConfigXml] = useState<string>(DEFAULT_XML);
     const [projectExists, setProjectExists] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
-    const [createAccountOpen, setCreateAccountOpen] = useState(false);
+    const [accessSettingsOpen, setAccessSettingsOpen] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
     const [showSaved, setShowSaved] = useState(false);
     const savedTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -61,6 +64,7 @@ export default function AnnotatePage() {
     const [role, setRole] = useState<Role>('annotator');
     const [loading, setLoading] = useState(true);
     const [pendingUpload, setPendingUpload] = useState<{ cases: CaseData[]; fileName: string } | null>(null);
+    const [jumpValue, setJumpValue] = useState('');
     // Parsed-but-not-yet-mapped import, awaiting the admin's text-column choice.
     const [pendingImport, setPendingImport] = useState<
         | {
@@ -68,7 +72,8 @@ export default function AnnotatePage() {
               columns: string[];
               samples: Record<string, string>;
               defaultColumn?: string;
-              build: (textColumn: string) => CaseData[];
+              defaultIdColumn?: string;
+              build: (textColumn: string, idColumn: string) => CaseData[];
           }
         | null
     >(null);
@@ -202,24 +207,24 @@ export default function AnnotatePage() {
                 // Per-format: the rows to inspect for columns, and a builder that
                 // turns the parsed source into cases given the chosen text column.
                 let rowsForColumns: Record<string, unknown>[];
-                let build: (textColumn: string) => CaseData[];
+                let build: (textColumn: string, idColumn: string) => CaseData[];
 
                 if (file.name.endsWith('.json')) {
                     const parsed = JSON.parse(fileContent as string);
                     const tasks: LSTask[] = Array.isArray(parsed) ? parsed : [parsed];
                     rowsForColumns = tasks.map((t) => t.data ?? {});
-                    build = (textColumn) => tasksToCases(tasks, textColumn);
+                    build = (textColumn, idColumn) => tasksToCases(tasks, textColumn, idColumn);
                 } else if (file.name.endsWith('.csv')) {
                     const result = Papa.parse(fileContent as string, { header: true, skipEmptyLines: true });
                     const rows = result.data as Record<string, unknown>[];
                     rowsForColumns = rows;
-                    build = (textColumn) => rowsToCases(rows, textColumn);
+                    build = (textColumn, idColumn) => rowsToCases(rows, textColumn, idColumn);
                 } else {
                     const workbook = XLSX.read(fileContent, { type: 'binary' });
                     const sheet = workbook.Sheets[workbook.SheetNames[0]];
                     const rows = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
                     rowsForColumns = rows;
-                    build = (textColumn) => rowsToCases(rows, textColumn);
+                    build = (textColumn, idColumn) => rowsToCases(rows, textColumn, idColumn);
                 }
 
                 const columns = columnsOf(rowsForColumns);
@@ -227,11 +232,13 @@ export default function AnnotatePage() {
                     throw new Error('No columns found. Please check the file format and content.');
                 }
 
+                const samples = columnSamples(rowsForColumns);
                 setPendingImport({
                     fileName: file.name,
                     columns,
-                    samples: columnSamples(rowsForColumns),
-                    defaultColumn: guessTextColumn(columns),
+                    samples,
+                    defaultColumn: guessTextColumn(columns, samples),
+                    defaultIdColumn: guessIdColumn(columns),
                     build,
                 });
             } catch (error: any) {
@@ -248,13 +255,13 @@ export default function AnnotatePage() {
         else reader.readAsBinaryString(file);
     };
 
-    /** Build cases from the chosen text column, then upload (or confirm replace). */
-    const handleTextColumnChosen = (textColumn: string) => {
+    /** Build cases from the chosen text + ID columns, then upload (or confirm replace). */
+    const handleTextColumnChosen = (textColumn: string, idColumn: string) => {
         if (!pendingImport) return;
         const { fileName: name, build } = pendingImport;
         setPendingImport(null);
 
-        const cases = build(textColumn);
+        const cases = build(textColumn, idColumn);
         if (cases.length === 0) {
             toast({
                 variant: 'destructive',
@@ -299,6 +306,33 @@ export default function AnnotatePage() {
         else toast({ title: "Start of Data", description: "You are at the first case." });
     };
 
+    const isAnnotated = (c: CaseData) => c.results.length > 0;
+    const annotatedCount = useMemo(() => data.filter(isAnnotated).length, [data]);
+
+    /** Jump to the case number typed in the input (1-based). */
+    const handleJump = () => {
+        const n = parseInt(jumpValue, 10);
+        if (Number.isNaN(n) || n < 1 || n > data.length) {
+            toast({ variant: 'destructive', title: 'Invalid case number', description: `Enter a number between 1 and ${data.length}.` });
+            return;
+        }
+        setCurrentIndex(n - 1);
+        setJumpValue('');
+    };
+
+    /** Move to the next case without any annotations, wrapping around. */
+    const handleNextUnannotated = () => {
+        const n = data.length;
+        for (let step = 1; step <= n; step++) {
+            const idx = (currentIndex + step) % n;
+            if (!isAnnotated(data[idx])) {
+                setCurrentIndex(idx);
+                return;
+            }
+        }
+        toast({ title: 'All cases annotated', description: 'Every case has at least one annotation.' });
+    };
+
     const currentCase = data[currentIndex];
 
     const replaceDialog = (
@@ -334,6 +368,7 @@ export default function AnnotatePage() {
             columns={pendingImport.columns}
             samples={pendingImport.samples}
             defaultColumn={pendingImport.defaultColumn}
+            defaultIdColumn={pendingImport.defaultIdColumn}
             fileName={pendingImport.fileName}
             onConfirm={handleTextColumnChosen}
         />
@@ -350,8 +385,12 @@ export default function AnnotatePage() {
         />
     );
 
-    const createAccountDialog = isAdmin ? (
-        <AdminCreateAccountDialog open={createAccountOpen} onOpenChange={setCreateAccountOpen} />
+    const accessSettingsDialog = isAdmin ? (
+        <AccessSettingsDialog
+            open={accessSettingsOpen}
+            onOpenChange={setAccessSettingsOpen}
+            currentEmail={user}
+        />
     ) : null;
 
     const exportDialog = isAdmin ? (
@@ -372,7 +411,7 @@ export default function AnnotatePage() {
             <div className="flex items-center justify-center min-h-screen bg-background p-4">
                 {textColumnDialog}
                 {settingsDialog}
-                {createAccountDialog}
+                {accessSettingsDialog}
                 <Card className="w-full max-w-lg text-center shadow-2xl transition-all hover:shadow-primary/20">
                     <CardHeader>
                         <div className="mx-auto bg-primary/10 p-4 rounded-full w-fit">
@@ -395,8 +434,8 @@ export default function AnnotatePage() {
                                 <Button variant="outline" onClick={() => setSettingsOpen(true)}>
                                     <Settings2 className="mr-2" /> Labeling Setup
                                 </Button>
-                                <Button variant="outline" onClick={() => setCreateAccountOpen(true)}>
-                                    <UserPlus className="mr-2" /> Create Account
+                                <Button variant="outline" onClick={() => setAccessSettingsOpen(true)}>
+                                    <Users className="mr-2" /> Access Settings
                                 </Button>
                             </div>
                         ) : (
@@ -415,10 +454,10 @@ export default function AnnotatePage() {
             {textColumnDialog}
             {replaceDialog}
             {settingsDialog}
-            {createAccountDialog}
+            {accessSettingsDialog}
             {exportDialog}
             <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b">
-                <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+                <div className="mx-auto w-full max-w-[1800px] px-4 h-16 flex items-center justify-between">
                     <h1 className="text-xl font-bold text-primary">BMI Annotation Tool</h1>
                     <div className="flex items-center gap-3">
                         <span className="text-sm text-muted-foreground">Welcome, {user}</span>
@@ -437,8 +476,8 @@ export default function AnnotatePage() {
                             </Button>
                         )}
                         {isAdmin && (
-                            <Button variant="outline" onClick={() => setCreateAccountOpen(true)}>
-                                <UserPlus className="mr-2" /> Create Account
+                            <Button variant="outline" onClick={() => setAccessSettingsOpen(true)}>
+                                <Users className="mr-2" /> Access Settings
                             </Button>
                         )}
                         <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Log out">
@@ -448,9 +487,9 @@ export default function AnnotatePage() {
                 </div>
             </header>
 
-            <main className="flex-1 container mx-auto p-4 md:p-6 lg:p-8">
-                <div className="grid gap-8 md:grid-cols-3">
-                    <div className="md:col-span-2 flex flex-col gap-6">
+            <main className="flex-1 mx-auto w-full max-w-[1800px] p-4 md:p-6 lg:p-8">
+                <div className="grid gap-8 md:grid-cols-3 lg:grid-cols-4">
+                    <div className="md:col-span-2 lg:col-span-3 flex flex-col gap-6">
                         <Annotator
                             key={`${currentCase.ID}-${configXml}`}
                             caseData={currentCase}
@@ -459,25 +498,55 @@ export default function AnnotatePage() {
                         />
                     </div>
 
-                    <div className="md:col-span-1 flex flex-col gap-6">
+                    <div className="md:col-span-1 flex flex-col gap-6 md:sticky md:top-20 md:self-start">
                         <Card className="shadow-lg">
                             <CardHeader>
-                                <div className="flex justify-between items-center">
-                                    <CardTitle>Navigation & Info</CardTitle>
-                                    <Badge variant="secondary">{`Case ${currentIndex + 1} / ${data.length}`}</Badge>
+                                <div className="flex items-center justify-between gap-2">
+                                    <CardTitle className="truncate text-lg">Navigation</CardTitle>
+                                    <Badge variant="secondary" className="shrink-0">{`Case ${currentIndex + 1} / ${data.length}`}</Badge>
                                 </div>
                                 <div className="space-y-1 text-sm text-muted-foreground">
                                     <p className="truncate">File: {fileName}</p>
                                     <p className="truncate">ID: {currentCase.ID}</p>
                                 </div>
                             </CardHeader>
-                            <CardContent className="flex justify-between items-center">
-                                <Button variant="outline" onClick={handlePrev} disabled={currentIndex === 0}>
-                                    <ChevronLeft className="mr-2" /> Previous
+                            <CardContent className="flex flex-col gap-3">
+                                <div className="space-y-1.5">
+                                    <div className="flex justify-between text-sm text-muted-foreground">
+                                        <span>Annotated</span>
+                                        <span className="tabular-nums">{annotatedCount} / {data.length}</span>
+                                    </div>
+                                    <Progress value={data.length ? (annotatedCount / data.length) * 100 : 0} className="h-2" />
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button variant="outline" className="flex-1 min-w-0" onClick={handlePrev} disabled={currentIndex === 0}>
+                                        <ChevronLeft className="mr-1 h-4 w-4 shrink-0" /> Prev
+                                    </Button>
+                                    <Button variant="default" className="flex-1 min-w-0 bg-primary hover:bg-primary/90" onClick={handleNext} disabled={currentIndex === data.length - 1}>
+                                        Next <ChevronRight className="ml-1 h-4 w-4 shrink-0" />
+                                    </Button>
+                                </div>
+                                <Button variant="outline" className="w-full" onClick={handleNextUnannotated} disabled={annotatedCount === data.length}>
+                                    <SkipForward className="mr-2 h-4 w-4 shrink-0" /> Next unannotated
                                 </Button>
-                                <Button variant="default" onClick={handleNext} disabled={currentIndex === data.length - 1} className="bg-primary hover:bg-primary/90">
-                                    Next <ChevronRight className="ml-2" />
-                                </Button>
+                                <form
+                                    className="flex gap-2"
+                                    onSubmit={(e) => { e.preventDefault(); handleJump(); }}
+                                >
+                                    <Input
+                                        type="number"
+                                        min={1}
+                                        max={data.length}
+                                        value={jumpValue}
+                                        onChange={(e) => setJumpValue(e.target.value)}
+                                        placeholder={`Go to case (1–${data.length})`}
+                                        className="h-9"
+                                        aria-label="Jump to case number"
+                                    />
+                                    <Button type="submit" variant="outline" className="h-9 shrink-0" disabled={!jumpValue}>
+                                        Go
+                                    </Button>
+                                </form>
                             </CardContent>
                         </Card>
                     </div>
