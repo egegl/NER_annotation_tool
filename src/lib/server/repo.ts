@@ -126,6 +126,13 @@ export const listUsers = (): UserListItem[] =>
     .prepare('SELECT id, email, role FROM users ORDER BY email')
     .all() as UserListItem[];
 
+/** Delete an account by id. Its sessions and annotations cascade away (see the
+ * `ON DELETE CASCADE` foreign keys), so this permanently removes that user's
+ * annotation work. Caller is responsible for guardrails (self / last admin). */
+export const deleteUser = (id: number): void => {
+  getDb().prepare('DELETE FROM users WHERE id = ?').run(id);
+};
+
 /** Create a new account. Throws on invalid email or duplicate. */
 export const createUser = async (
   rawEmail: string,
