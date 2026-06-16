@@ -30,12 +30,18 @@ export default function LoginPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: loginEmail, password: loginPassword }),
       });
-      const result = await response.json();
+      // Don't assume the body is JSON: a busy/restarting server can return an
+      // empty or HTML error page, and response.json() would throw a cryptic
+      // "unexpected end of data" that masks the real status.
+      const result = await response.json().catch(() => null);
       if (response.ok) {
-        toast({ title: 'Login Successful', description: `Welcome, ${result.email}!` });
+        toast({ title: 'Login Successful', description: `Welcome, ${result?.email ?? ''}!` });
         router.push('/annotate');
       } else {
-        setLoginError(result.error ?? 'Invalid credentials. Please check your email and password.');
+        setLoginError(
+          result?.error ??
+            'The server is busy or unavailable. Please wait a moment and try again.',
+        );
       }
     } catch (error) {
       console.error('Could not verify login', error);

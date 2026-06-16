@@ -20,6 +20,12 @@ let db: Database.Database | null = null;
 const initSchema = (database: Database.Database) => {
   database.pragma('journal_mode = WAL');
   database.pragma('foreign_keys = ON');
+  // When several server processes share the one database file (each annotator
+  // launches their own `next start` against the shared DATA_DIR), a write can
+  // briefly find the database locked by another process. Without a busy timeout
+  // SQLite fails immediately with SQLITE_BUSY; with it, the write waits and
+  // retries for up to 15s, which is far longer than any contention here lasts.
+  database.pragma('busy_timeout = 15000');
 
   database.exec(`
     CREATE TABLE IF NOT EXISTS users (

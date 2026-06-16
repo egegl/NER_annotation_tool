@@ -17,14 +17,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Email and password are required.' }, { status: 400 });
   }
 
-  const user = await verifyLogin(email, password);
-  if (!user) {
+  try {
+    const user = await verifyLogin(email, password);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Invalid credentials. Please check your email and password.' },
+        { status: 401 },
+      );
+    }
+
+    await createSession(user.id);
+    return NextResponse.json({ email: user.email, role: user.role });
+  } catch (err) {
+    // A database error here (e.g. transient lock contention when several
+    // annotators log in at once) must still come back as JSON, otherwise the
+    // client's response.json() throws "unexpected end of data" and hides the
+    // real cause. Surface a clear, retryable message instead.
+    console.error('Login failed', err);
     return NextResponse.json(
-      { error: 'Invalid credentials. Please check your email and password.' },
-      { status: 401 },
+      { error: 'The server is busy. Please try logging in again in a moment.' },
+      { status: 503 },
     );
   }
-
-  await createSession(user.id);
-  return NextResponse.json({ email: user.email, role: user.role });
 }
