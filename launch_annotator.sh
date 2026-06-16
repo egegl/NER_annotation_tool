@@ -77,10 +77,15 @@ STAMP_FILE="$PROJECT_DIR/.next/.built-commit"
 
 # The commit we'd build from, but only when the tree is clean. A dirty tree
 # leaves this empty, which forces a rebuild (uncommitted edits aren't a commit).
+# package-lock.json is ignored: `npm install` can rewrite it on a different
+# machine/npm version without the source code actually changing, which would
+# otherwise mark the tree dirty and defeat the build-skip on every launch.
 BUILD_COMMIT=""
-if git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
-   && [ -z "$(git -C "$PROJECT_DIR" status --porcelain)" ]; then
-    BUILD_COMMIT="$(git -C "$PROJECT_DIR" rev-parse HEAD)"
+if git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    DIRTY="$(git -C "$PROJECT_DIR" status --porcelain | grep -v 'package-lock\.json' || true)"
+    if [ -z "$DIRTY" ]; then
+        BUILD_COMMIT="$(git -C "$PROJECT_DIR" rev-parse HEAD)"
+    fi
 fi
 
 if [ "${SKIP_BUILD:-0}" = "1" ]; then
