@@ -15,8 +15,16 @@ import { Annotator } from '@/components/app/annotator';
 import { ProjectSettingsDialog } from '@/components/app/ProjectSettingsDialog';
 import { AdminCreateAccountDialog } from '@/components/app/AdminCreateAccountDialog';
 import { ExportDialog } from '@/components/app/ExportDialog';
+import { SelectTextColumnDialog } from '@/components/app/SelectTextColumnDialog';
 import { parseLabelConfig } from '@/lib/labelConfig';
-import { rowsToCases, tasksToCases } from '@/lib/io';
+import {
+    rowsToCases,
+    tasksToCases,
+    columnsOf,
+    columnSamples,
+    guessTextColumn,
+} from '@/lib/io';
+import type { LSTask } from '@/lib/io';
 import { cn } from '@/lib/utils';
 import defaultLabeling from '@/config/labeling.json';
 import {
@@ -53,6 +61,17 @@ export default function AnnotatePage() {
     const [role, setRole] = useState<Role>('annotator');
     const [loading, setLoading] = useState(true);
     const [pendingUpload, setPendingUpload] = useState<{ cases: CaseData[]; fileName: string } | null>(null);
+    // Parsed-but-not-yet-mapped import, awaiting the admin's text-column choice.
+    const [pendingImport, setPendingImport] = useState<
+        | {
+              fileName: string;
+              columns: string[];
+              samples: Record<string, string>;
+              defaultColumn?: string;
+              build: (textColumn: string) => CaseData[];
+          }
+        | null
+    >(null);
     const router = useRouter();
 
     const isAdmin = role === 'admin';
@@ -170,7 +189,8 @@ export default function AnnotatePage() {
         toast({ title: 'Labeling Setup Saved', description: 'The shared annotation interface has been updated.' });
     };
 
-    /** Parse an imported file into cases (client-side), then upload or confirm. */
+    /** Parse an imported file (client-side), detect its columns, then ask the
+     * admin which column holds the main text before building cases. */
     const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
@@ -179,31 +199,41 @@ export default function AnnotatePage() {
         reader.onload = (e) => {
             try {
                 const fileContent = e.target?.result;
-                let cases: CaseData[] = [];
+                // Per-format: the rows to inspect for columns, and a builder that
+                // turns the parsed source into cases given the chosen text column.
+                let rowsForColumns: Record<string, unknown>[];
+                let build: (textColumn: string) => CaseData[];
 
                 if (file.name.endsWith('.json')) {
                     const parsed = JSON.parse(fileContent as string);
-                    const tasks = Array.isArray(parsed) ? parsed : [parsed];
-                    cases = tasksToCases(tasks);
+                    const tasks: LSTask[] = Array.isArray(parsed) ? parsed : [parsed];
+                    rowsForColumns = tasks.map((t) => t.data ?? {});
+                    build = (textColumn) => tasksToCases(tasks, textColumn);
                 } else if (file.name.endsWith('.csv')) {
                     const result = Papa.parse(fileContent as string, { header: true, skipEmptyLines: true });
-                    cases = rowsToCases(result.data as Record<string, unknown>[]);
+                    const rows = result.data as Record<string, unknown>[];
+                    rowsForColumns = rows;
+                    build = (textColumn) => rowsToCases(rows, textColumn);
                 } else {
                     const workbook = XLSX.read(fileContent, { type: 'binary' });
                     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                    cases = rowsToCases(XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[]);
+                    const rows = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
+                    rowsForColumns = rows;
+                    build = (textColumn) => rowsToCases(rows, textColumn);
                 }
 
-                if (cases.length === 0) {
-                    throw new Error("No valid data found. Ensure a 'text' (or 'raw_text') column exists, or import a Label Studio JSON export.");
+                const columns = columnsOf(rowsForColumns);
+                if (columns.length === 0) {
+                    throw new Error('No columns found. Please check the file format and content.');
                 }
 
-                if (projectExists) {
-                    // Replacing wipes everyone's annotations — confirm first.
-                    setPendingUpload({ cases, fileName: file.name });
-                } else {
-                    void uploadProject(cases, file.name);
-                }
+                setPendingImport({
+                    fileName: file.name,
+                    columns,
+                    samples: columnSamples(rowsForColumns),
+                    defaultColumn: guessTextColumn(columns),
+                    build,
+                });
             } catch (error: any) {
                 toast({ variant: 'destructive', title: 'Import Failed', description: error.message || 'Please check the file format and content.' });
             } finally {
@@ -216,6 +246,30 @@ export default function AnnotatePage() {
 
         if (file.name.endsWith('.csv') || file.name.endsWith('.json')) reader.readAsText(file);
         else reader.readAsBinaryString(file);
+    };
+
+    /** Build cases from the chosen text column, then upload (or confirm replace). */
+    const handleTextColumnChosen = (textColumn: string) => {
+        if (!pendingImport) return;
+        const { fileName: name, build } = pendingImport;
+        setPendingImport(null);
+
+        const cases = build(textColumn);
+        if (cases.length === 0) {
+            toast({
+                variant: 'destructive',
+                title: 'Import Failed',
+                description: `Column "${textColumn}" is empty for every row. Pick a different column.`,
+            });
+            return;
+        }
+
+        if (projectExists) {
+            // Replacing wipes everyone's annotations — confirm first.
+            setPendingUpload({ cases, fileName: name });
+        } else {
+            void uploadProject(cases, name);
+        }
     };
 
     /** Admin: push the parsed project to the server (shared with all annotators). */
@@ -273,6 +327,18 @@ export default function AnnotatePage() {
         </AlertDialog>
     );
 
+    const textColumnDialog = pendingImport ? (
+        <SelectTextColumnDialog
+            open={!!pendingImport}
+            onOpenChange={(o) => { if (!o) setPendingImport(null); }}
+            columns={pendingImport.columns}
+            samples={pendingImport.samples}
+            defaultColumn={pendingImport.defaultColumn}
+            fileName={pendingImport.fileName}
+            onConfirm={handleTextColumnChosen}
+        />
+    ) : null;
+
     const settingsDialog = (
         <ProjectSettingsDialog
             open={settingsOpen}
@@ -304,6 +370,7 @@ export default function AnnotatePage() {
     if (!currentCase) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-background p-4">
+                {textColumnDialog}
                 {settingsDialog}
                 {createAccountDialog}
                 <Card className="w-full max-w-lg text-center shadow-2xl transition-all hover:shadow-primary/20">
@@ -345,6 +412,7 @@ export default function AnnotatePage() {
 
     return (
         <div className="min-h-screen bg-background text-foreground flex flex-col">
+            {textColumnDialog}
             {replaceDialog}
             {settingsDialog}
             {createAccountDialog}

@@ -23,20 +23,74 @@ export const normalizeText = (value: unknown): string =>
     .replace(/_x000D_/g, '\n')
     .replace(/\r/g, '');
 
-const stringifyRow = (row: Record<string, unknown>): Record<string, string> => {
+/**
+ * Stringify a row's values. When `textField` is given, its value is mirrored
+ * into `text` so the labeling config's `$text` always resolves, regardless of
+ * what the source column is named. When omitted, falls back to the legacy
+ * `text`/`raw_text` convention.
+ */
+const stringifyRow = (
+  row: Record<string, unknown>,
+  textField?: string,
+): Record<string, string> => {
   const data: Record<string, string> = {};
   for (const key of Object.keys(row)) data[key] = normalizeText(row[key]);
-  // Default config references $text; alias raw_text so common exports work.
-  if (!data.text && data.raw_text) data.text = data.raw_text;
+  if (textField) {
+    if (textField !== 'text') data.text = data[textField] ?? '';
+  } else if (!data.text && data.raw_text) {
+    // Legacy default: the config references $text; alias raw_text.
+    data.text = data.raw_text;
+  }
   return data;
 };
 
-/** Build cases from parsed CSV/XLSX rows. An `annotations` column (JSON array)
- * is parsed back into results so CSV exports round-trip. */
-export const rowsToCases = (rows: Record<string, unknown>[]): CaseData[] =>
+/** Distinct column keys present across rows, in first-seen order. The
+ * `annotations` round-trip column is excluded — it is not annotatable text. */
+export const columnsOf = (rows: Record<string, unknown>[]): string[] => {
+  const cols: string[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    for (const key of Object.keys(row)) {
+      if (key === 'annotations' || seen.has(key)) continue;
+      seen.add(key);
+      cols.push(key);
+    }
+  }
+  return cols;
+};
+
+/** First non-empty value per column, for previewing a column's content. */
+export const columnSamples = (
+  rows: Record<string, unknown>[],
+): Record<string, string> => {
+  const samples: Record<string, string> = {};
+  for (const row of rows) {
+    for (const key of Object.keys(row)) {
+      if (samples[key]) continue;
+      const value = normalizeText(row[key]);
+      if (value) samples[key] = value;
+    }
+  }
+  return samples;
+};
+
+/** Suggest which column is most likely the main text, by common conventions. */
+export const guessTextColumn = (columns: string[]): string | undefined =>
+  columns.find((c) => c === 'text') ??
+  columns.find((c) => c === 'raw_text') ??
+  columns.find((c) => /text/i.test(c)) ??
+  columns[0];
+
+/** Build cases from parsed CSV/XLSX rows. `textField` names the column holding
+ * the text to annotate. An `annotations` column (JSON array) is parsed back into
+ * results so CSV exports round-trip. */
+export const rowsToCases = (
+  rows: Record<string, unknown>[],
+  textField?: string,
+): CaseData[] =>
   rows
     .map((row, i) => {
-      const data = stringifyRow(row);
+      const data = stringifyRow(row, textField);
       let results: AnnotationResult[] = [];
       if (data.annotations) {
         try {
@@ -51,15 +105,18 @@ export const rowsToCases = (rows: Record<string, unknown>[]): CaseData[] =>
     })
     .filter((c) => (c.data.text ?? '').length > 0);
 
-/** Build cases from a Label Studio task JSON export (round-trip / re-import). */
-export const tasksToCases = (tasks: LSTask[]): CaseData[] =>
-  tasks.map((task, i) => {
-    const data = stringifyRow(task.data ?? {});
-    const results =
-      task.annotations?.[0]?.result ?? task.predictions?.[0]?.result ?? [];
-    const ID = data.ID || (task.id != null ? String(task.id) : `case-${i + 1}`);
-    return { ID, data, results };
-  });
+/** Build cases from a Label Studio task JSON export (round-trip / re-import).
+ * `textField` names the data field holding the text to annotate. */
+export const tasksToCases = (tasks: LSTask[], textField?: string): CaseData[] =>
+  tasks
+    .map((task, i) => {
+      const data = stringifyRow(task.data ?? {}, textField);
+      const results =
+        task.annotations?.[0]?.result ?? task.predictions?.[0]?.result ?? [];
+      const ID = data.ID || (task.id != null ? String(task.id) : `case-${i + 1}`);
+      return { ID, data, results };
+    })
+    .filter((c) => (c.data.text ?? '').length > 0);
 
 /** Serialize cases to Label Studio task JSON. */
 export const casesToTasks = (cases: CaseData[]): LSTask[] =>
