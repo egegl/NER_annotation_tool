@@ -14,8 +14,7 @@ the database, not the browser. The main tables:
 - `annotations`: each user's results, keyed by `(task, user)`.
 - `users` / `sessions`: accounts and httpOnly cookie sessions.
 
-The database is at `DATA_DIR/annotation.db` (default `./data/annotation.db`). To
-back it up, copy that file.
+The database is at `DATA_DIR/annotation.db` (default `./data/annotation.db`).
 
 ## Usage
 
