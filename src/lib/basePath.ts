@@ -1,6 +1,6 @@
 /**
  * When the app is served under a subpath behind a reverse proxy (e.g.
- * `sesame.bmi.emory.edu/bozlablabelapp/`), Next.js automatically prefixes
+ * `https://example.com/myapp/`), Next.js automatically prefixes
  * <Link>, next/navigation router, and next/image with `basePath` — but it does
  * NOT rewrite raw `fetch()` URL strings. So a `fetch('/api/...')` would hit the
  * domain root and 404. Wrap every app-absolute fetch URL in `api()` to add the
