@@ -110,7 +110,9 @@ export function SelectTextColumnDialog({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={NO_ID}>None — auto-number each row</SelectItem>
-              {columns.map((col) => (
+              {/* Radix Select forbids empty-string item values; blank headers are
+                  already dropped by columnsOf, but guard here too. */}
+              {columns.filter((col) => col.trim() !== '').map((col) => (
                 <SelectItem key={col} value={col}>
                   {col}
                   {samples[col] ? (
