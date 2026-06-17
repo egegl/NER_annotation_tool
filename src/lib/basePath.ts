@@ -13,7 +13,16 @@
  */
 export const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 
-/** Prefix an app-absolute path (one starting with '/') with the basePath. */
+/**
+ * Build a fetch URL for an app-absolute path (one starting with '/'): prepend
+ * the basePath and append a trailing slash before any query string.
+ *
+ * The trailing slash matches `trailingSlash: true` in next.config.ts — with it,
+ * the canonical URL for every route (API route handlers included) ends in '/',
+ * so hitting the slashed form directly avoids a 308 redirect on every request.
+ */
 export function api(path: string): string {
-  return `${BASE_PATH}${path}`;
+  const [p, query] = path.split('?');
+  const withSlash = p.endsWith('/') ? p : `${p}/`;
+  return `${BASE_PATH}${withSlash}${query ? `?${query}` : ''}`;
 }

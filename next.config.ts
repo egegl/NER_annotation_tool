@@ -9,9 +9,19 @@ const basePath = (process.env.BASE_PATH || '').replace(/\/+$/, '');
 
 const nextConfig: NextConfig = {
   // Runs as a Node server (`next start`) so the app can persist a shared project
-  // and per-user annotations in SQLite. Static export ('output: export') cannot
-  // support cross-user collaboration.
+  // and per-user annotations in SQLite. NOTE: do NOT add `output: 'export'` (as
+  // the upstream static tool does) — it would drop all the server/API/SQLite
+  // functionality this fork depends on.
   basePath: basePath || undefined,
+  // assetPrefix mirrors basePath (with trailing slash) to match the upstream
+  // tool's nginx setup behind the same gateway.
+  assetPrefix: basePath ? `${basePath}/` : undefined,
+
+  // Canonicalize URLs WITH a trailing slash, matching the upstream tool's nginx
+  // configuration (`trailingSlash: true`) on the shared gateway. Without this,
+  // the app redirects `/path/` -> `/path`, which is the opposite of what that
+  // nginx expects and breaks subpath resolution.
+  trailingSlash: true,
 
   // Mirror the basePath to a public var so client-side fetch() calls (which
   // Next does NOT auto-prefix) can prepend it via src/lib/basePath.ts.
