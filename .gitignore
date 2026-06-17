@@ -51,3 +51,7 @@ firestore-debug.log
 
 # build artifacts
 *.zip
+
+# Internal, site-specific deployment notes (cluster hostnames/paths). Kept local
+# so the public repo stays infra-agnostic.
+/DEPLOY.md
