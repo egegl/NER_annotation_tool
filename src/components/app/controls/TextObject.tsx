@@ -29,7 +29,7 @@ interface ReadingPrefs {
   maxWidth: number | null;
 }
 
-const DEFAULT_PREFS: ReadingPrefs = { fontSize: 15, lineHeight: 1.8, maxWidth: null };
+const DEFAULT_PREFS: ReadingPrefs = { fontSize: 14, lineHeight: 1.5, maxWidth: null };
 
 /** Render a literal slice of the note text, inserting a visual line break after
  * any run of 3+ consecutive spaces (clinical exports often use runs of spaces
