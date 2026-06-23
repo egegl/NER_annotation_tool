@@ -42,6 +42,7 @@ const initSchema = (database: Database.Database) => {
       id          INTEGER PRIMARY KEY CHECK (id = 1),
       file_name   TEXT NOT NULL,
       config_xml  TEXT NOT NULL,
+      keywords    TEXT NOT NULL DEFAULT '',
       created_at  TEXT NOT NULL,
       created_by  TEXT
     );
@@ -70,6 +71,13 @@ const initSchema = (database: Database.Database) => {
       expires_at TEXT NOT NULL
     );
   `);
+
+  // Migration: older databases predate the project `keywords` column (admin-set
+  // always-highlight keywords). Add it in place so existing projects keep working.
+  const projectCols = database.prepare(`PRAGMA table_info(project)`).all() as { name: string }[];
+  if (!projectCols.some((c) => c.name === 'keywords')) {
+    database.exec(`ALTER TABLE project ADD COLUMN keywords TEXT NOT NULL DEFAULT ''`);
+  }
 };
 
 /** Lazily open (and initialise) the shared database connection. */

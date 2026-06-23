@@ -52,6 +52,8 @@ export default function AnnotatePage() {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [fileName, setFileName] = useState('');
     const [configXml, setConfigXml] = useState<string>(DEFAULT_XML);
+    // Admin-set always-highlight keywords, shared with all annotators.
+    const [keywords, setKeywords] = useState('');
     const [projectExists, setProjectExists] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [accessSettingsOpen, setAccessSettingsOpen] = useState(false);
@@ -64,7 +66,7 @@ export default function AnnotatePage() {
     const [user, setUser] = useState<string | null>(null);
     const [role, setRole] = useState<Role>('annotator');
     const [loading, setLoading] = useState(true);
-    const [pendingUpload, setPendingUpload] = useState<{ cases: CaseData[]; fileName: string } | null>(null);
+    const [pendingUpload, setPendingUpload] = useState<{ cases: CaseData[]; fileName: string; keywords: string } | null>(null);
     const [jumpValue, setJumpValue] = useState('');
     // Parsed-but-not-yet-mapped import, awaiting the admin's text-column choice.
     const [pendingImport, setPendingImport] = useState<
@@ -105,6 +107,7 @@ export default function AnnotatePage() {
 
         setProjectExists(true);
         setConfigXml(projectData.project.configXml);
+        setKeywords(projectData.project.keywords ?? '');
         setFileName(projectData.project.fileName);
         setTaskIds(tasks.map((t) => t.id));
         setData(tasks.map((t) => ({ ID: t.ID, data: t.data, results: annotations[t.id] ?? [] })));
@@ -256,8 +259,9 @@ export default function AnnotatePage() {
         else reader.readAsBinaryString(file);
     };
 
-    /** Build cases from the chosen text + ID columns, then upload (or confirm replace). */
-    const handleTextColumnChosen = (textColumn: string, idColumn: string) => {
+    /** Build cases from the chosen text + ID columns, then upload (or confirm replace).
+     * `adminKeywords` is the optional always-highlight keyword list (file contents). */
+    const handleTextColumnChosen = (textColumn: string, idColumn: string, adminKeywords: string) => {
         if (!pendingImport) return;
         const { fileName: name, build } = pendingImport;
         setPendingImport(null);
@@ -274,19 +278,19 @@ export default function AnnotatePage() {
 
         if (projectExists) {
             // Replacing wipes everyone's annotations — confirm first.
-            setPendingUpload({ cases, fileName: name });
+            setPendingUpload({ cases, fileName: name, keywords: adminKeywords });
         } else {
-            void uploadProject(cases, name);
+            void uploadProject(cases, name, adminKeywords);
         }
     };
 
     /** Admin: push the parsed project to the server (shared with all annotators). */
-    const uploadProject = async (cases: CaseData[], name: string) => {
+    const uploadProject = async (cases: CaseData[], name: string, adminKeywords: string) => {
         try {
             const res = await fetch(api('/api/project'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fileName: name, configXml, cases }),
+                body: JSON.stringify({ fileName: name, configXml, keywords: adminKeywords, cases }),
             });
             const result = await res.json();
             if (!res.ok) throw new Error(result.error ?? 'Upload failed.');
@@ -351,7 +355,7 @@ export default function AnnotatePage() {
                     <AlertDialogCancel onClick={() => setPendingUpload(null)}>Cancel</AlertDialogCancel>
                     <AlertDialogAction
                         onClick={() => {
-                            if (pendingUpload) void uploadProject(pendingUpload.cases, pendingUpload.fileName);
+                            if (pendingUpload) void uploadProject(pendingUpload.cases, pendingUpload.fileName, pendingUpload.keywords);
                             setPendingUpload(null);
                         }}
                     >
@@ -458,14 +462,15 @@ export default function AnnotatePage() {
             {accessSettingsDialog}
             {exportDialog}
             <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b">
-                <div className="mx-auto w-full max-w-[1800px] px-4 h-16 flex items-center justify-between">
+                <div className="mx-auto w-full max-w-[1800px] px-4 h-14 flex items-center justify-between">
                     <h1 className="text-xl font-bold text-primary">BMI Annotation Tool</h1>
                     <div className="flex items-center gap-3">
-                        <span className="text-sm text-muted-foreground">Welcome, {user}</span>
                         <input type="file" ref={dataFileInputRef} onChange={handleFileImport} className="hidden" accept=".csv,.xlsx,.xls,.json" />
-                        <Button variant="outline" onClick={() => setSettingsOpen(true)}>
-                            <Settings2 className="mr-2" /> {isAdmin ? 'Labeling Setup' : 'View Interface'}
-                        </Button>
+                        {isAdmin && (
+                            <Button variant="outline" onClick={() => setSettingsOpen(true)}>
+                                <Settings2 className="mr-2" /> Labeling Setup
+                            </Button>
+                        )}
                         {isAdmin && (
                             <Button variant="outline" onClick={() => dataFileInputRef.current?.click()}>
                                 <FileUp className="mr-2" /> Replace Project
@@ -488,20 +493,21 @@ export default function AnnotatePage() {
                 </div>
             </header>
 
-            <main className="flex-1 mx-auto w-full max-w-[1800px] p-4 md:p-6 lg:p-8">
-                <div className="grid gap-8 md:grid-cols-3 lg:grid-cols-4">
-                    <div className="md:col-span-2 lg:col-span-3 flex flex-col gap-6">
+            <main className="flex-1 mx-auto w-full max-w-[1800px] p-3 lg:p-4">
+                <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
+                    <div className="md:col-span-2 lg:col-span-3 flex flex-col gap-4">
                         <Annotator
                             key={`${currentCase.ID}-${configXml}`}
                             caseData={currentCase}
                             config={parsedConfig}
+                            adminKeywords={keywords}
                             onChange={handleResultsChange}
                         />
                     </div>
 
-                    <div className="md:col-span-1 flex flex-col gap-6 md:sticky md:top-20 md:self-start">
+                    <div className="md:col-span-1 flex flex-col gap-4 md:sticky md:top-16 md:self-start">
                         <Card className="shadow-lg">
-                            <CardHeader>
+                            <CardHeader className="p-3">
                                 <div className="flex items-center justify-between gap-2">
                                     <CardTitle className="truncate text-lg">Navigation</CardTitle>
                                     <Badge variant="secondary" className="shrink-0">{`Case ${currentIndex + 1} / ${data.length}`}</Badge>
@@ -511,7 +517,7 @@ export default function AnnotatePage() {
                                     <p className="truncate">ID: {currentCase.ID}</p>
                                 </div>
                             </CardHeader>
-                            <CardContent className="flex flex-col gap-3">
+                            <CardContent className="p-3 pt-0 flex flex-col gap-3">
                                 <div className="space-y-1.5">
                                     <div className="flex justify-between text-sm text-muted-foreground">
                                         <span>Annotated</span>

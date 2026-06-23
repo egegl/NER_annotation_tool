@@ -16,10 +16,11 @@ import {
   Highlighter,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { findOption, labelsControlsFor, resolveObjectValue } from '@/lib/labelConfig';
+import { findOption, labelsControlsFor, nerHeaderNodeFor, resolveObjectValue } from '@/lib/labelConfig';
 import { useLocalStorageState } from '@/hooks/useLocalStorageState';
 import { findMatches, findKeywordMatches, parseTerms, type Interval } from '@/lib/highlight';
 import { useAnnotator } from './context';
+import { LabelsControl } from './LabelsControl';
 
 interface ReadingPrefs {
   fontSize: number;
@@ -58,6 +59,7 @@ export function TextObject({ object }: { object: ObjectTag }) {
   const {
     config,
     caseData,
+    adminKeywords,
     previewMode,
     armed,
     spanRegionsFor,
@@ -81,11 +83,19 @@ export function TextObject({ object }: { object: ObjectTag }) {
   const [currentMatch, setCurrentMatch] = useState(0);
   const [prefs, setPrefs] = useLocalStorageState<ReadingPrefs>('bmi.readingPrefs', DEFAULT_PREFS);
   const [watchlistRaw, setWatchlistRaw] = useLocalStorageState<string>('bmi.watchlist', '');
-  const watchTerms = useMemo(() => parseTerms(watchlistRaw), [watchlistRaw]);
+  const personalTerms = useMemo(() => parseTerms(watchlistRaw), [watchlistRaw]);
+  // Admin-set keywords are always highlighted; the annotator's own terms add to
+  // them. De-duplicated (case-insensitively) so admin terms aren't underlined twice.
+  const watchTerms = useMemo(() => {
+    const seen = new Set(adminKeywords.map((t) => t.toLowerCase()));
+    return [...adminKeywords, ...personalTerms.filter((t) => !seen.has(t.toLowerCase()))];
+  }, [adminKeywords, personalTerms]);
 
   const text = resolveObjectValue(object.value, caseData.data);
   const spans = spanRegionsFor(object.name);
   const myLabelControls = labelsControlsFor(config, object.name);
+  // The NER section header (if any) rides with the label bank, below the toolbar.
+  const nerHeader = nerHeaderNodeFor(config, object.name)?.attrs.value;
 
   // Validated, non-overlapping label spans (used for both rendering and as the
   // exclusion mask for search/keyword highlights).
@@ -333,6 +343,16 @@ export function TextObject({ object }: { object: ObjectTag }) {
             aria-label="Search within the note"
           />
         </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 shrink-0"
+          onClick={() => setQuery('')}
+          disabled={!query}
+          aria-label="Clear search"
+        >
+          <X className="h-4 w-4" />
+        </Button>
         <span className="w-14 shrink-0 text-center text-xs tabular-nums text-muted-foreground">
           {countLabel}
         </span>
@@ -355,16 +375,6 @@ export function TextObject({ object }: { object: ObjectTag }) {
           aria-label="Next match"
         >
           <ChevronDown className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9 shrink-0"
-          onClick={() => setQuery('')}
-          disabled={!query}
-          aria-label="Clear search"
-        >
-          <X className="h-4 w-4" />
         </Button>
 
         {/* Reading controls */}
@@ -429,13 +439,23 @@ export function TextObject({ object }: { object: ObjectTag }) {
               <Highlighter className="h-4 w-4" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-80 space-y-2" align="end">
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Always-highlight keywords</p>
-              <p className="text-xs text-muted-foreground">
-                Underlined across every note. One per line, or comma-separated.
-              </p>
-            </div>
+          <PopoverContent className="w-80 space-y-3" align="end">
+            {adminKeywords.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">Project keywords</p>
+                <div className="flex flex-wrap gap-1">
+                  {adminKeywords.map((kw) => (
+                    <span
+                      key={kw}
+                      className="rounded-sm bg-muted px-1.5 py-0.5 text-xs underline decoration-2 decoration-sky-500 underline-offset-2"
+                    >
+                      {kw}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            <p className="text-sm font-medium">Your keywords</p>
             <Textarea
               value={watchlistRaw}
               onChange={(e) => setWatchlistRaw(e.target.value)}
@@ -453,7 +473,7 @@ export function TextObject({ object }: { object: ObjectTag }) {
 
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <PopoverTrigger asChild>
-          <button ref={triggerRef} className="opacity-0 w-0 h-0 p-0 m-0" />
+          <button ref={triggerRef} className="absolute opacity-0 w-0 h-0 p-0 m-0" />
         </PopoverTrigger>
         <PopoverContent className="w-auto p-1" side="bottom" align="start">
           <div className="flex flex-col gap-1 max-h-64 overflow-auto">
@@ -478,6 +498,17 @@ export function TextObject({ object }: { object: ObjectTag }) {
           </div>
         </PopoverContent>
       </Popover>
+      {/* NER section (header + label bank): below the search toolbar, above the note. */}
+      {(nerHeader || myLabelControls.length > 0) && (
+        <div className="mt-4 mb-2 space-y-2">
+          {nerHeader && (
+            <h3 className="text-base font-bold text-foreground">{nerHeader}</h3>
+          )}
+          {myLabelControls.map((control) => (
+            <LabelsControl key={control.name} control={control} />
+          ))}
+        </div>
+      )}
       <div
         ref={ref}
         onMouseUp={handleMouseUp}

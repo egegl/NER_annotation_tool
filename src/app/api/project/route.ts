@@ -27,7 +27,11 @@ export async function GET() {
       data: JSON.parse(t.data_json) as Record<string, string>,
     }));
     return NextResponse.json({
-      project: { fileName: project.file_name, configXml: project.config_xml },
+      project: {
+        fileName: project.file_name,
+        configXml: project.config_xml,
+        keywords: project.keywords ?? '',
+      },
       tasks,
     });
   } catch (error) {
@@ -42,6 +46,7 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       fileName?: string;
       configXml?: string;
+      keywords?: string;
       cases?: CaseData[];
     };
     if (!body.fileName || !body.configXml || !Array.isArray(body.cases) || body.cases.length === 0) {
@@ -52,7 +57,7 @@ export async function POST(request: Request) {
     }
     // Strip any imported annotations so every annotator starts from scratch.
     const cases = body.cases.map((c) => ({ ID: c.ID, data: c.data, results: [] }));
-    replaceProject(body.fileName, body.configXml, cases, admin.email);
+    replaceProject(body.fileName, body.configXml, body.keywords ?? '', cases, admin.email);
     return NextResponse.json({ ok: true, count: cases.length });
   } catch (error) {
     return handle(error);
