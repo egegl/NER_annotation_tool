@@ -16,6 +16,8 @@ export interface ProjectRow {
   id: number;
   file_name: string;
   config_xml: string;
+  /** Admin-set always-highlight keywords (free-form: newlines or commas). */
+  keywords: string;
   created_at: string;
   created_by: string | null;
 }
@@ -45,6 +47,7 @@ export const getTasks = (): TaskRow[] =>
 export const replaceProject = (
   fileName: string,
   configXml: string,
+  keywords: string,
   cases: CaseData[],
   createdBy: string,
 ) => {
@@ -52,9 +55,9 @@ export const replaceProject = (
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM project WHERE id = 1').run(); // cascades to tasks + annotations
     db.prepare(
-      `INSERT INTO project (id, file_name, config_xml, created_at, created_by)
-       VALUES (1, ?, ?, ?, ?)`,
-    ).run(fileName, configXml, new Date().toISOString(), createdBy);
+      `INSERT INTO project (id, file_name, config_xml, keywords, created_at, created_by)
+       VALUES (1, ?, ?, ?, ?, ?)`,
+    ).run(fileName, configXml, keywords, new Date().toISOString(), createdBy);
 
     const insert = db.prepare(
       'INSERT INTO tasks (project_id, idx, external_id, data_json) VALUES (1, ?, ?, ?)',

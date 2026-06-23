@@ -5,22 +5,24 @@ import type { AnnotationResult, CaseData, ConfigNode, ParsedConfig } from '@/typ
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AnnotatorProvider } from './controls/context';
 import { TextObject } from './controls/TextObject';
-import { LabelsControl } from './controls/LabelsControl';
 import { ChoicesControl } from './controls/ChoicesControl';
 import { TextAreaControl } from './controls/TextAreaControl';
 import { RatingControl } from './controls/RatingControl';
 import { RelationsControl } from './controls/RelationsControl';
 import { RegionPanel } from './controls/RegionPanel';
+import { nerHeaderNodeFor } from '@/lib/labelConfig';
 
 interface AnnotatorProps {
   caseData: CaseData;
   config: ParsedConfig;
   onChange: (results: AnnotationResult[]) => void;
+  /** Admin-set always-highlight keywords (free-form: newlines or commas). */
+  adminKeywords?: string;
   /** True in the admin config preview: hides annotator-only tools (search etc.). */
   previewMode?: boolean;
 }
 
-export function Annotator({ caseData, config, onChange, previewMode = false }: AnnotatorProps) {
+export function Annotator({ caseData, config, onChange, adminKeywords = '', previewMode = false }: AnnotatorProps) {
   if (!config.valid) {
     return (
       <Card className="shadow-lg">
@@ -49,6 +51,14 @@ export function Annotator({ caseData, config, onChange, previewMode = false }: A
   const objectByName = (name?: string) =>
     config.objects.find((o) => o.name === name);
 
+  // An NER section's header renders inside its text box (with the label bank),
+  // so skip it at its original XML position.
+  const nerHeaderNodes = new Set(
+    config.objects
+      .map((o) => nerHeaderNodeFor(config, o.name))
+      .filter((n): n is ConfigNode => n !== null),
+  );
+
   const renderNode = (node: ConfigNode, key: string): React.ReactNode => {
     switch (node.tag) {
       case 'View':
@@ -58,8 +68,9 @@ export function Annotator({ caseData, config, onChange, previewMode = false }: A
           </div>
         );
       case 'Header':
+        if (nerHeaderNodes.has(node)) return null;
         return (
-          <h3 key={key} className="text-sm font-semibold text-foreground mt-2">
+          <h3 key={key} className="text-base font-bold text-foreground">
             {node.attrs.value}
           </h3>
         );
@@ -67,10 +78,10 @@ export function Annotator({ caseData, config, onChange, previewMode = false }: A
         const obj = objectByName(node.attrs.name);
         return obj ? <TextObject key={key} object={obj} /> : null;
       }
-      case 'Labels': {
-        const c = controlByName(node.attrs.name);
-        return c ? <LabelsControl key={key} control={c} /> : null;
-      }
+      case 'Labels':
+        // The NER label bank renders inside its target <Text> (TextObject),
+        // between the search toolbar and the note text — not at its XML position.
+        return null;
       case 'Choices': {
         const c = controlByName(node.attrs.name);
         return c && !c.perRegion ? <ChoicesControl key={key} control={c} /> : null;
@@ -107,22 +118,17 @@ export function Annotator({ caseData, config, onChange, previewMode = false }: A
   );
 
   return (
-    <AnnotatorProvider config={config} caseData={caseData} onChange={onChange} previewMode={previewMode}>
+    <AnnotatorProvider config={config} caseData={caseData} onChange={onChange} adminKeywords={adminKeywords} previewMode={previewMode}>
       <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle>Annotate</CardTitle>
-          <CardDescription>Annotate according to the labeling setup.</CardDescription>
-        </CardHeader>
-        <CardContent>{config.tree && renderNode(config.tree, 'root')}</CardContent>
+        <CardContent className="p-3">{config.tree && renderNode(config.tree, 'root')}</CardContent>
       </Card>
 
       {showPanel && (
         <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle>Regions</CardTitle>
-            <CardDescription>Labeled spans, per-region values, and relations.</CardDescription>
+          <CardHeader className="p-3 pb-0">
+            <CardTitle className="text-base">Regions</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-3">
             <RegionPanel />
           </CardContent>
         </Card>

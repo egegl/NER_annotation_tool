@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,9 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Upload, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { parseTerms } from '@/lib/highlight';
 
 /** Sentinel for "no ID column — auto-number each row" in the ID <Select>.
  * Radix Select disallows empty-string item values, so we map it to '' on use. */
@@ -38,8 +40,10 @@ interface Props {
   defaultIdColumn?: string;
   fileName: string;
   /** Called with the chosen columns when the admin confirms. `idColumn` is the
-   * empty string when the admin opts to auto-number instead of using a column. */
-  onConfirm: (textColumn: string, idColumn: string) => void;
+   * empty string when the admin opts to auto-number instead of using a column.
+   * `keywords` is the raw contents of the optional always-highlight keyword file
+   * (empty string when none was chosen). */
+  onConfirm: (textColumn: string, idColumn: string, keywords: string) => void;
 }
 
 const truncate = (value: string, max = 140) =>
@@ -57,14 +61,39 @@ export function SelectTextColumnDialog({
 }: Props) {
   const [selected, setSelected] = useState<string>(defaultColumn ?? columns[0] ?? '');
   const [idColumn, setIdColumn] = useState<string>(defaultIdColumn || NO_ID);
+  // Optional always-highlight keyword file: raw contents + the chosen file name.
+  const [keywordsRaw, setKeywordsRaw] = useState('');
+  const [keywordsFileName, setKeywordsFileName] = useState('');
+  const keywordsInputRef = useRef<HTMLInputElement>(null);
+  const keywordCount = useMemo(() => parseTerms(keywordsRaw).length, [keywordsRaw]);
 
   // Reset the choices each time a new file is opened for selection.
   useEffect(() => {
     if (open) {
       setSelected(defaultColumn ?? columns[0] ?? '');
       setIdColumn(defaultIdColumn || NO_ID);
+      setKeywordsRaw('');
+      setKeywordsFileName('');
     }
   }, [open, defaultColumn, defaultIdColumn, columns]);
+
+  const handleKeywordsFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset so the same file can be re-selected after a clear.
+    if (keywordsInputRef.current) keywordsInputRef.current.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setKeywordsRaw(String(ev.target?.result ?? ''));
+      setKeywordsFileName(file.name);
+    };
+    reader.readAsText(file);
+  };
+
+  const clearKeywords = () => {
+    setKeywordsRaw('');
+    setKeywordsFileName('');
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -128,6 +157,60 @@ export function SelectTextColumnDialog({
           </p>
         </div>
 
+        <div className="space-y-2 border-t pt-4">
+          <Label>
+            Always-highlight keywords{' '}
+            <span className="font-normal text-muted-foreground">(optional)</span>
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Upload a text file of keywords (one per line, or comma-separated). They&apos;re
+            underlined in every note for every annotator, on top of each annotator&apos;s
+            own keyword list.
+          </p>
+          <input
+            type="file"
+            ref={keywordsInputRef}
+            onChange={handleKeywordsFile}
+            className="hidden"
+            accept=".txt,.csv,.tsv,text/plain"
+            aria-label="Always-highlight keywords file"
+          />
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => keywordsInputRef.current?.click()}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              {keywordsFileName ? 'Replace file' : 'Choose file'}
+            </Button>
+            {keywordsFileName ? (
+              <>
+                <span className="min-w-0 flex-1 truncate text-sm">{keywordsFileName}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0"
+                  onClick={clearKeywords}
+                  aria-label="Remove keywords file"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </>
+            ) : (
+              <span className="text-sm text-muted-foreground">No file chosen</span>
+            )}
+          </div>
+          {keywordsFileName ? (
+            <p className="text-xs text-muted-foreground">
+              {keywordCount} keyword{keywordCount === 1 ? '' : 's'} loaded
+            </p>
+          ) : null}
+        </div>
+
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
@@ -135,7 +218,7 @@ export function SelectTextColumnDialog({
           <Button
             disabled={!selected}
             onClick={() => {
-              onConfirm(selected, idColumn === NO_ID ? '' : idColumn);
+              onConfirm(selected, idColumn === NO_ID ? '' : idColumn, keywordsRaw);
               onOpenChange(false);
             }}
           >

@@ -198,6 +198,38 @@ export const parseLabelConfig = (xml: string): ParsedConfig => {
 export const labelsControlsFor = (config: ParsedConfig, objectName: string): ControlTag[] =>
   config.controls.filter((c) => c.type === 'Labels' && c.toName === objectName);
 
+/**
+ * The <Header> node that titles an object's NER section — the header that is the
+ * immediate previous sibling of the first <Labels toName="objectName">. Returned
+ * (by node identity) so the NER section header can be rendered together with the
+ * label bank inside the text box and skipped at its original XML position.
+ * Null when the labels have no such leading header.
+ */
+export const nerHeaderNodeFor = (
+  config: ParsedConfig,
+  objectName: string,
+): ConfigNode | null => {
+  const tree = config.tree;
+  if (!tree) return null;
+
+  let result: ConfigNode | null = null;
+  const visit = (node: ConfigNode): boolean => {
+    const kids = node.children;
+    for (let i = 0; i < kids.length; i++) {
+      const child = kids[i];
+      if (child.tag === 'Labels' && child.attrs.toName === objectName) {
+        const prev = kids[i - 1];
+        result = prev && prev.tag === 'Header' ? prev : null;
+        return true; // first matching <Labels> in document order wins
+      }
+      if (visit(child)) return true;
+    }
+    return false;
+  };
+  visit(tree);
+  return result;
+};
+
 /** Find an option (with its color) by value across all controls. */
 export const findOption = (
   config: ParsedConfig,

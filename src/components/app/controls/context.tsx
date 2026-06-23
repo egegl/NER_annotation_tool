@@ -11,6 +11,7 @@ import type {
   RelationResult,
 } from '@/types';
 import { isRegion, isRelation } from '@/types';
+import { parseTerms } from '@/lib/highlight';
 
 export const genId = () => Math.random().toString(36).slice(2, 10);
 
@@ -42,6 +43,8 @@ export const isEmptyValue = (value: RegionValue): boolean => {
 interface AnnotatorCtx {
   config: ParsedConfig;
   caseData: CaseData;
+  /** Admin-set always-highlight keywords, applied to every note for all annotators. */
+  adminKeywords: string[];
   /** True in the admin config preview: hides annotator-only tools (search etc.). */
   previewMode: boolean;
   regions: RegionResult[];
@@ -82,11 +85,13 @@ interface ProviderProps {
   config: ParsedConfig;
   caseData: CaseData;
   onChange: (results: AnnotationResult[]) => void;
+  /** Admin-set always-highlight keywords (free-form: newlines or commas). */
+  adminKeywords?: string;
   previewMode?: boolean;
   children: React.ReactNode;
 }
 
-export function AnnotatorProvider({ config, caseData, onChange, previewMode = false, children }: ProviderProps) {
+export function AnnotatorProvider({ config, caseData, onChange, adminKeywords = '', previewMode = false, children }: ProviderProps) {
   const [armed, setArmed] = useState<{ control: string; value: string } | null>(null);
   const [armedRelation, setArmedRelation] = useState<string | null>(null);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
@@ -95,6 +100,7 @@ export function AnnotatorProvider({ config, caseData, onChange, previewMode = fa
   const results = caseData.results;
   const regions = useMemo(() => results.filter(isRegion), [results]);
   const relations = useMemo(() => results.filter(isRelation), [results]);
+  const adminKeywordTerms = useMemo(() => parseTerms(adminKeywords), [adminKeywords]);
 
   const commit = (next: AnnotationResult[]) => onChange(next);
 
@@ -202,6 +208,7 @@ export function AnnotatorProvider({ config, caseData, onChange, previewMode = fa
     return {
       config,
       caseData,
+      adminKeywords: adminKeywordTerms,
       previewMode,
       regions,
       relations,
@@ -225,7 +232,7 @@ export function AnnotatorProvider({ config, caseData, onChange, previewMode = fa
       flipRelation,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config, caseData, previewMode, results, regions, relations, armed, armedRelation, selectedRegionId, relationFrom]);
+  }, [config, caseData, adminKeywordTerms, previewMode, results, regions, relations, armed, armedRelation, selectedRegionId, relationFrom]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
