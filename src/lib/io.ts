@@ -94,14 +94,19 @@ const stringifyRow = (
   }
 
   // Auto-highlight: if the text wraps matched keywords in `####keyword####`,
-  // strip the markers and record each keyword's span so the renderer underlines
-  // it at its exact position — no separate keyword file needed. The cleaned text
-  // becomes canonical (kept consistent in the source column too, for exports),
-  // so annotation offsets index the marker-free text.
-  const { cleanedText, spans } = extractWrappedKeywords(data.text ?? '');
-  if (cleanedText !== (data.text ?? '')) {
+  // record each keyword's span so the renderer underlines it at its exact
+  // position — no separate keyword file needed. `data.text` is the cleaned copy
+  // the UI shows and that annotation offsets index; the original ####-marked
+  // text is left UNTOUCHED in the source column so exports keep the markers
+  // verbatim. (When the text column literally *is* `text` there's no separate
+  // column to hold the original, so it's stashed in `raw_text`.)
+  const original = data.text ?? '';
+  const { cleanedText, spans } = extractWrappedKeywords(original);
+  if (cleanedText !== original) {
     data.text = cleanedText;
-    if (textField && textField !== 'text') data[textField] = cleanedText;
+    if ((!textField || textField === 'text') && !data.raw_text) {
+      data.raw_text = original;
+    }
   }
   const keywordSpans = keywordSpansFor(cleanedText, spans, data, textField);
   if (keywordSpans) data[KEYWORD_SPANS_KEY] = keywordSpans;
