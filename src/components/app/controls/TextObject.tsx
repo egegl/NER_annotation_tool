@@ -512,7 +512,7 @@ export function TextObject({ object }: { object: ObjectTag }) {
       <div
         ref={ref}
         onMouseUp={handleMouseUp}
-        className="p-4 border rounded-md min-h-[480px] max-h-[60vh] w-full overflow-auto"
+        className="p-4 border rounded-md min-h-[8rem] max-h-[60vh] w-full overflow-auto"
         style={{
           whiteSpace: 'pre-wrap',
           fontSize: `${prefs.fontSize}px`,
