@@ -33,8 +33,11 @@ ones (so "medical marijuana" highlights as one span, not two).
 
 The terms were chosen to avoid false positives in clinical prose — e.g. ambiguous
 slang like "joint", "pot", or "blunt" is intentionally excluded so "joint pain"
-or "potassium" isn't highlighted. Every term here appears in the demo notes
-(122 highlights across the 15 notes).
+or "potassium" isn't highlighted. Each note mentions only one or two cannabis
+terms, the way a real pain-management note reads, so the list works as a broad
+watchlist: about 30 of its terms surface across the 15 notes (30 highlights
+total, ~2 per note) and the rest are there to catch wording your own data might
+use.
 
 ## How to use
 
