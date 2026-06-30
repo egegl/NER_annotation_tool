@@ -82,13 +82,26 @@ export const parseTerms = (raw: string): string[] =>
  */
 export const KEYWORD_SPANS_KEY = '__keywordSpans';
 
+/** Longest run of text treated as a single wrapped keyword. Marker pairs
+ * farther apart than this are left unpaired, so a stray or asymmetric marker
+ * can't bridge across a whole sentence and highlight unrelated text. Kept
+ * comfortably above the longest real keyword phrase but well below sentence
+ * length. */
+const MAX_WRAPPED_KEYWORD_LEN = 40;
+
 /**
- * A keyword wrapped in `####` markers — e.g. `####cannabis####`, or a whole
- * phrase `####medical marijuana####`. The inner class is `[^#]+` (keywords
- * never contain `#`) so the delimiters always pair up correctly and a stray
- * marker can't bridge across and swallow text. Assumes markers are balanced.
+ * A keyword wrapped in hash markers — `####cannabis####`, `#####CBD#####`, or a
+ * phrase `####medical marijuana####`. Markers are runs of FOUR OR MORE `#`
+ * (some snippets wrap a word in more than four), and the whole run is consumed
+ * so no stray hashes are left behind. The captured keyword excludes `#` and
+ * newlines and is length-bounded (MAX_WRAPPED_KEYWORD_LEN), so two distant
+ * markers can't pair up and swallow the text between them. Assumes markers come
+ * in pairs around a short keyword.
  */
-const WRAPPED_TERM_RE = /####([^#]+)####/g;
+const WRAPPED_TERM_RE = new RegExp(
+  `#{4,}([^#\\n]{1,${MAX_WRAPPED_KEYWORD_LEN}})#{4,}`,
+  'g',
+);
 
 /**
  * Strip `####keyword####` markers from `text`, returning the cleaned text (no
