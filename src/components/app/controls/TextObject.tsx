@@ -18,7 +18,7 @@ import {
 import { cn } from '@/lib/utils';
 import { findOption, labelsControlsFor, nerHeaderNodeFor, resolveObjectValue } from '@/lib/labelConfig';
 import { useLocalStorageState } from '@/hooks/useLocalStorageState';
-import { findMatches, findKeywordMatches, parseTerms, type Interval } from '@/lib/highlight';
+import { findMatches, findKeywordMatches, parseTerms, KEYWORD_SPANS_KEY, type Interval } from '@/lib/highlight';
 import { useAnnotator } from './context';
 import { LabelsControl } from './LabelsControl';
 
@@ -126,6 +126,50 @@ export function TextObject({ object }: { object: ObjectTag }) {
     () => (previewMode ? [] : findKeywordMatches(text, watchTerms, regionIntervals)),
     [previewMode, text, watchTerms, regionIntervals],
   );
+  // Keyword spans baked in at import time (from `####keyword####` markers or the
+  // exact/fuzzy match columns). Stored as character offsets into this exact
+  // text, so they're used verbatim — only dropped if out of bounds or covering
+  // an already-labelled region.
+  const markerSpans = useMemo<Interval[]>(() => {
+    if (previewMode) return [];
+    const raw = caseData.data[KEYWORD_SPANS_KEY];
+    if (!raw) return [];
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+    if (!Array.isArray(parsed)) return [];
+    return (parsed as Interval[])
+      .filter(
+        (s) =>
+          s &&
+          typeof s.start === 'number' &&
+          typeof s.end === 'number' &&
+          s.start >= 0 &&
+          s.end <= text.length &&
+          s.start < s.end,
+      )
+      .filter((s) => !regionIntervals.some((r) => s.start < r.end && s.end > r.start));
+  }, [previewMode, caseData.data, text.length, regionIntervals]);
+  // Union of import-time marker spans and the live watchlist matches, collapsed
+  // to non-overlapping intervals (leftmost, longest-wins) so each character is
+  // underlined once even where the two sources agree.
+  const keywordHighlights = useMemo<Interval[]>(() => {
+    const all = [...markerSpans, ...keywordMatches].sort(
+      (a, b) => a.start - b.start || b.end - b.start - (a.end - a.start),
+    );
+    const out: Interval[] = [];
+    let last = -1;
+    for (const iv of all) {
+      if (iv.start >= last) {
+        out.push(iv);
+        last = iv.end;
+      }
+    }
+    return out;
+  }, [markerSpans, keywordMatches]);
 
   // Reset / clamp the active match as the query or matches change.
   useEffect(() => setCurrentMatch(0), [query]);
@@ -240,9 +284,9 @@ export function TextObject({ object }: { object: ObjectTag }) {
     const sMarks = searchMatches
       .map((iv, idx) => ({ ...iv, idx, kind: 'search' as const }))
       .filter(inRange);
-    const kMarks = keywordMatches
+    const kMarks = keywordHighlights
       .filter(inRange)
-      // Search highlights win over watchlist where they overlap.
+      // Search highlights win over keyword/marker highlights where they overlap.
       .filter((k) => !searchMatches.some((s) => k.start < s.end && k.end > s.start))
       .map((k) => ({ ...k, idx: -1, kind: 'keyword' as const }));
     const marks = [...sMarks, ...kMarks].sort((a, b) => a.start - b.start);

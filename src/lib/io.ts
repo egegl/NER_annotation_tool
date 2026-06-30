@@ -1,5 +1,56 @@
 import Papa from 'papaparse';
 import type { AnnotationResult, CaseData } from '@/types';
+import {
+  KEYWORD_SPANS_KEY,
+  extractWrappedKeywords,
+  findKeywordMatches,
+  type Interval,
+} from '@/lib/highlight';
+
+/** Columns to mine for matched keywords when a note has no inline `####`
+ * markers — Yuhe's "exact"/"fuzzy" match columns, and the like. */
+const MATCH_COLUMN_RE = /exact|fuzzy|matched|keyword/i;
+/** Split a match-column cell into individual terms (comma / semicolon / pipe /
+ * tab / newline separated). */
+const MATCH_TERM_SEP = /[,;|\t\n]+/;
+
+/** Drop internal `__`-prefixed data keys (e.g. KEYWORD_SPANS_KEY) so they never
+ * leak into exports. */
+const withoutInternal = (
+  data: Record<string, string>,
+): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(data).filter(([k]) => !k.startsWith('__')),
+  );
+
+/**
+ * Compute keyword-highlight spans for a note's (already cleaned) text:
+ * the exact positions of any `####`-wrapped keywords, or — when the note had no
+ * markers — every occurrence of the words listed in its exact/fuzzy match
+ * columns. Returns a JSON string for `data[KEYWORD_SPANS_KEY]`, or '' if none.
+ */
+const keywordSpansFor = (
+  cleanedText: string,
+  markerSpans: Interval[],
+  data: Record<string, string>,
+  textField: string | undefined,
+): string => {
+  if (markerSpans.length > 0) return JSON.stringify(markerSpans);
+
+  const skip = new Set(['text', 'raw_text', 'annotations']);
+  if (textField) skip.add(textField);
+  const terms: string[] = [];
+  for (const key of Object.keys(data)) {
+    if (skip.has(key) || key.startsWith('__') || !MATCH_COLUMN_RE.test(key)) continue;
+    for (const part of data[key].split(MATCH_TERM_SEP)) {
+      const term = part.trim();
+      if (term) terms.push(term);
+    }
+  }
+  if (terms.length === 0) return '';
+  const fallback = findKeywordMatches(cleanedText, terms);
+  return fallback.length > 0 ? JSON.stringify(fallback) : '';
+};
 
 /** Label Studio task shape (subset we read/write). */
 export interface LSTask {
@@ -41,6 +92,20 @@ const stringifyRow = (
     // Legacy default: the config references $text; alias raw_text.
     data.text = data.raw_text;
   }
+
+  // Auto-highlight: if the text wraps matched keywords in `####keyword####`,
+  // strip the markers and record each keyword's span so the renderer underlines
+  // it at its exact position — no separate keyword file needed. The cleaned text
+  // becomes canonical (kept consistent in the source column too, for exports),
+  // so annotation offsets index the marker-free text.
+  const { cleanedText, spans } = extractWrappedKeywords(data.text ?? '');
+  if (cleanedText !== (data.text ?? '')) {
+    data.text = cleanedText;
+    if (textField && textField !== 'text') data[textField] = cleanedText;
+  }
+  const keywordSpans = keywordSpansFor(cleanedText, spans, data, textField);
+  if (keywordSpans) data[KEYWORD_SPANS_KEY] = keywordSpans;
+
   return data;
 };
 
@@ -53,7 +118,7 @@ export const columnsOf = (rows: Record<string, unknown>[]): string[] => {
   const seen = new Set<string>();
   for (const row of rows) {
     for (const key of Object.keys(row)) {
-      if (key === 'annotations' || key.trim() === '' || seen.has(key)) continue;
+      if (key === 'annotations' || key.trim() === '' || key.startsWith('__') || seen.has(key)) continue;
       seen.add(key);
       cols.push(key);
     }
@@ -173,14 +238,14 @@ export const tasksToCases = (
 /** Serialize cases to Label Studio task JSON. */
 export const casesToTasks = (cases: CaseData[]): LSTask[] =>
   cases.map((c) => ({
-    data: { ID: c.ID, ...c.data },
+    data: { ID: c.ID, ...withoutInternal(c.data) },
     annotations: [{ result: c.results }],
   }));
 
 /** Serialize cases to CSV: data columns + an `annotations` JSON column. */
 export const casesToCsv = (cases: CaseData[]): string => {
   const rows = cases.map((c) => {
-    const { ID: _ignored, ...rest } = c.data;
+    const { ID: _ignored, ...rest } = withoutInternal(c.data);
     return { ID: c.ID, ...rest, annotations: JSON.stringify(c.results) };
   });
   const keys = new Set<string>();
@@ -202,7 +267,7 @@ export const casesToCsv = (cases: CaseData[]): string => {
  */
 export const multiUserCasesToTasks = (cases: MultiUserCase[]): LSTask[] =>
   cases.map((c) => ({
-    data: { ID: c.ID, ...c.data },
+    data: { ID: c.ID, ...withoutInternal(c.data) },
     annotations: c.byUser.map((u) => ({ completed_by: u.email, result: u.results })),
   }));
 
@@ -213,7 +278,7 @@ export const multiUserCasesToTasks = (cases: MultiUserCase[]): LSTask[] =>
  */
 export const multiUserCasesToCsv = (cases: MultiUserCase[]): string => {
   const rows = cases.flatMap((c) => {
-    const { ID: _ignored, ...rest } = c.data;
+    const { ID: _ignored, ...rest } = withoutInternal(c.data);
     return c.byUser.map((u) => ({
       ID: c.ID,
       ...rest,
