@@ -20,7 +20,9 @@ const handle = (error: unknown) => {
 
 /**
  * Admin only: export the selected users' annotations. `userIds` chooses which
- * annotators are included; `format` is 'json' (combined Label Studio) or 'csv'.
+ * annotators are included; `format` is 'json' (combined Label Studio) or 'csv';
+ * `includeGroundTruth` adds each task's adjudicated results as a
+ * "ground_truth" annotator entry.
  */
 export async function POST(request: Request) {
   try {
@@ -30,11 +32,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No project to export yet.' }, { status: 400 });
     }
 
-    const body = (await request.json()) as { userIds?: number[]; format?: 'json' | 'csv' };
+    const body = (await request.json()) as {
+      userIds?: number[];
+      format?: 'json' | 'csv';
+      includeGroundTruth?: boolean;
+    };
     const userIds = Array.isArray(body.userIds) ? body.userIds : [];
     const format = body.format === 'csv' ? 'csv' : 'json';
 
-    const cases: MultiUserCase[] = gatherExport(userIds).map((row) => ({
+    const cases: MultiUserCase[] = gatherExport(userIds, body.includeGroundTruth === true).map((row) => ({
       ID: row.task.external_id,
       data: JSON.parse(row.task.data_json) as Record<string, string>,
       byUser: row.byUser,

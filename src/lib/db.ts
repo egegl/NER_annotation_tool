@@ -39,12 +39,13 @@ const initSchema = (database: Database.Database) => {
     );
 
     CREATE TABLE IF NOT EXISTS project (
-      id          INTEGER PRIMARY KEY CHECK (id = 1),
-      file_name   TEXT NOT NULL,
-      config_xml  TEXT NOT NULL,
-      keywords    TEXT NOT NULL DEFAULT '',
-      created_at  TEXT NOT NULL,
-      created_by  TEXT
+      id           INTEGER PRIMARY KEY CHECK (id = 1),
+      file_name    TEXT NOT NULL,
+      config_xml   TEXT NOT NULL,
+      keywords     TEXT NOT NULL DEFAULT '',
+      review_blind INTEGER NOT NULL DEFAULT 1,
+      created_at   TEXT NOT NULL,
+      created_by   TEXT
     );
 
     CREATE TABLE IF NOT EXISTS tasks (
@@ -70,6 +71,13 @@ const initSchema = (database: Database.Database) => {
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       expires_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS adjudications (
+      task_id      INTEGER PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+      reviewer_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      results_json TEXT NOT NULL,
+      updated_at   TEXT NOT NULL
+    );
   `);
 
   // Migration: older databases predate the project `keywords` column (admin-set
@@ -77,6 +85,11 @@ const initSchema = (database: Database.Database) => {
   const projectCols = database.prepare(`PRAGMA table_info(project)`).all() as { name: string }[];
   if (!projectCols.some((c) => c.name === 'keywords')) {
     database.exec(`ALTER TABLE project ADD COLUMN keywords TEXT NOT NULL DEFAULT ''`);
+  }
+  // Migration: the blind-adjudication flag for Reviewer Mode (masks annotator
+  // identities from the adjudicator). Defaults to blind.
+  if (!projectCols.some((c) => c.name === 'review_blind')) {
+    database.exec(`ALTER TABLE project ADD COLUMN review_blind INTEGER NOT NULL DEFAULT 1`);
   }
 };
 

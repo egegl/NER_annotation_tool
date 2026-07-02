@@ -18,6 +18,8 @@ export interface ProjectRow {
   config_xml: string;
   /** Admin-set always-highlight keywords (free-form: newlines or commas). */
   keywords: string;
+  /** 1 = Reviewer Mode masks annotator identities ("Annotator 1/2"). */
+  review_blind: number;
   created_at: string;
   created_by: string | null;
 }
@@ -77,6 +79,14 @@ export const updateConfig = (configXml: string) => {
   if (result.changes === 0) throw new Error('No project to configure yet.');
 };
 
+/** Update the Reviewer Mode blind-adjudication setting. */
+export const setReviewBlind = (blind: boolean) => {
+  const result = getDb()
+    .prepare('UPDATE project SET review_blind = ? WHERE id = 1')
+    .run(blind ? 1 : 0);
+  if (result.changes === 0) throw new Error('No project to configure yet.');
+};
+
 // ---------------------------------------------------------------------------
 // Annotations (per user)
 // ---------------------------------------------------------------------------
@@ -111,6 +121,82 @@ export const saveUserAnnotation = (
        DO UPDATE SET results_json = excluded.results_json, updated_at = excluded.updated_at`,
     )
     .run(taskId, userId, JSON.stringify(results), new Date().toISOString());
+};
+
+// ---------------------------------------------------------------------------
+// Review (admin adjudication)
+// ---------------------------------------------------------------------------
+
+export interface ReviewGather {
+  /** Users with at least one non-empty annotation, ordered by user id (the
+   * order gives blind mode its stable "Annotator N" numbering). */
+  annotators: { userId: number; email: string }[];
+  /** task id -> user id -> that user's non-empty results. */
+  byTask: Map<number, Map<number, AnnotationResult[]>>;
+}
+
+/** Every user's non-empty annotations, grouped for the admin review stream. */
+export const gatherReview = (): ReviewGather => {
+  const rows = getDb()
+    .prepare(
+      `SELECT a.task_id AS task_id, a.user_id AS user_id, u.email AS email, a.results_json AS results_json
+         FROM annotations a JOIN users u ON u.id = a.user_id
+        ORDER BY a.user_id`,
+    )
+    .all() as { task_id: number; user_id: number; email: string; results_json: string }[];
+
+  const annotators: { userId: number; email: string }[] = [];
+  const seen = new Set<number>();
+  const byTask = new Map<number, Map<number, AnnotationResult[]>>();
+  for (const row of rows) {
+    let results: AnnotationResult[] = [];
+    try {
+      results = JSON.parse(row.results_json);
+    } catch {
+      /* skip malformed */
+    }
+    if (results.length === 0) continue;
+    if (!seen.has(row.user_id)) {
+      seen.add(row.user_id);
+      annotators.push({ userId: row.user_id, email: row.email });
+    }
+    const perUser = byTask.get(row.task_id) ?? new Map<number, AnnotationResult[]>();
+    perUser.set(row.user_id, results);
+    byTask.set(row.task_id, perUser);
+  }
+  return { annotators, byTask };
+};
+
+/** Map of task id -> the adjudicated ground-truth results for that task. */
+export const getAdjudications = (): Record<number, AnnotationResult[]> => {
+  const rows = getDb()
+    .prepare('SELECT task_id, results_json FROM adjudications')
+    .all() as { task_id: number; results_json: string }[];
+  const out: Record<number, AnnotationResult[]> = {};
+  for (const row of rows) {
+    try {
+      out[row.task_id] = JSON.parse(row.results_json);
+    } catch {
+      out[row.task_id] = [];
+    }
+  }
+  return out;
+};
+
+/** Upsert one task's ground-truth decision (one adjudication per task). */
+export const saveAdjudication = (
+  taskId: number,
+  reviewerId: number,
+  results: AnnotationResult[],
+) => {
+  getDb()
+    .prepare(
+      `INSERT INTO adjudications (task_id, reviewer_id, results_json, updated_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT (task_id)
+       DO UPDATE SET reviewer_id = excluded.reviewer_id, results_json = excluded.results_json, updated_at = excluded.updated_at`,
+    )
+    .run(taskId, reviewerId, JSON.stringify(results), new Date().toISOString());
 };
 
 // ---------------------------------------------------------------------------
@@ -168,14 +254,27 @@ export interface ExportRow {
   byUser: { email: string; results: AnnotationResult[] }[];
 }
 
+/** Annotator name used for adjudicated ground truth in exports. */
+export const GROUND_TRUTH_NAME = 'ground_truth';
+
 /**
  * Gather, for the selected users, each task plus the (task, user) annotations.
  * Tasks always appear (even with no annotations) so the export reflects the full
- * dataset; only the selected users contribute annotation entries.
+ * dataset; only the selected users contribute annotation entries. With
+ * `includeGroundTruth`, each adjudicated task additionally gets a leading
+ * GROUND_TRUTH_NAME entry (leading so single-annotation re-imports prefer it).
  */
-export const gatherExport = (userIds: number[]): ExportRow[] => {
+export const gatherExport = (userIds: number[], includeGroundTruth = false): ExportRow[] => {
   const tasks = getTasks();
-  if (userIds.length === 0) return tasks.map((task) => ({ task, byUser: [] }));
+  const adjudications = includeGroundTruth ? getAdjudications() : {};
+  const groundTruthFor = (taskId: number): ExportRow['byUser'] => {
+    const results = adjudications[taskId];
+    return results && results.length > 0 ? [{ email: GROUND_TRUTH_NAME, results }] : [];
+  };
+
+  if (userIds.length === 0) {
+    return tasks.map((task) => ({ task, byUser: groundTruthFor(task.id) }));
+  }
 
   const db = getDb();
   const placeholders = userIds.map(() => '?').join(', ');
@@ -201,5 +300,8 @@ export const gatherExport = (userIds: number[]): ExportRow[] => {
     byTask.set(row.task_id, list);
   }
 
-  return tasks.map((task) => ({ task, byUser: byTask.get(task.id) ?? [] }));
+  return tasks.map((task) => ({
+    task,
+    byUser: [...groundTruthFor(task.id), ...(byTask.get(task.id) ?? [])],
+  }));
 };

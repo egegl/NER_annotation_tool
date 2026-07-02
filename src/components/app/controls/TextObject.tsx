@@ -36,7 +36,7 @@ const DEFAULT_PREFS: ReadingPrefs = { fontSize: 14, lineHeight: 1.5, maxWidth: n
  * where a line break was lost). The space characters are kept in the DOM — only
  * a <br>, which contributes no characters to Range.toString(), is added — so
  * annotation offsets and the exported text are unaffected. */
-function withLineBreaks(str: string, keyBase: string): React.ReactNode[] {
+export function withLineBreaks(str: string, keyBase: string): React.ReactNode[] {
   if (!str.includes('   ')) return [str];
   const re = / {3,}/g;
   const nodes: React.ReactNode[] = [];
