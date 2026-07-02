@@ -67,6 +67,48 @@ export const findKeywordMatches = (
   return out;
 };
 
+/** A run of text covered by the same subset of interval layers. */
+export interface LayerSegment {
+  start: number;
+  end: number;
+  /** Indices of the layers covering [start, end); empty = plain text. */
+  layers: number[];
+}
+
+/**
+ * Cut [from, to) at every interval boundary of every layer, and report which
+ * layers cover each resulting run. Used by Reviewer Mode to overlay several
+ * annotators' span sets over one text (distinct fills, blended where they
+ * overlap). Intervals within one layer may overlap each other; out-of-range
+ * boundaries are clamped.
+ */
+export const segmentLayers = (
+  from: number,
+  to: number,
+  layers: Interval[][],
+): LayerSegment[] => {
+  if (to <= from) return [];
+  const bounds = new Set<number>([from, to]);
+  for (const layer of layers) {
+    for (const iv of layer) {
+      if (iv.end <= from || iv.start >= to) continue;
+      bounds.add(Math.max(from, iv.start));
+      bounds.add(Math.min(to, iv.end));
+    }
+  }
+  const sorted = Array.from(bounds).sort((a, b) => a - b);
+  const out: LayerSegment[] = [];
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const [s, e] = [sorted[i], sorted[i + 1]];
+    const covering: number[] = [];
+    layers.forEach((layer, idx) => {
+      if (layer.some((iv) => iv.start <= s && e <= iv.end)) covering.push(idx);
+    });
+    out.push({ start: s, end: e, layers: covering });
+  }
+  return out;
+};
+
 /** Parse a free-form watchlist entry (commas or newlines) into terms. */
 export const parseTerms = (raw: string): string[] =>
   raw

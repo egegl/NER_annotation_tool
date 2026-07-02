@@ -11,13 +11,22 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { FileUp, FileDown, ChevronLeft, ChevronRight, FileText, UploadCloud, LogOut, Settings2, Check, Users, SkipForward } from 'lucide-react';
+import { FileUp, FileDown, ChevronLeft, ChevronRight, FileText, UploadCloud, LogOut, Settings2, Check, Users, SkipForward, ClipboardCheck } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Annotator } from '@/components/app/annotator';
 import { ProjectSettingsDialog } from '@/components/app/ProjectSettingsDialog';
 import { AccessSettingsDialog } from '@/components/app/AccessSettingsDialog';
 import { ExportDialog } from '@/components/app/ExportDialog';
 import { SelectTextColumnDialog } from '@/components/app/SelectTextColumnDialog';
+import { ReviewSettingsDialog } from '@/components/app/ReviewSettingsDialog';
+import { ReviewWorkspace } from '@/components/app/review/ReviewWorkspace';
+import {
+    agreementStats,
+    caseReviewStatus,
+    STATUS_COLORS,
+    type CaseReviewStatus,
+    type ReviewData,
+} from '@/lib/review';
 import { parseLabelConfig } from '@/lib/labelConfig';
 import {
     rowsToCases,
@@ -58,9 +67,15 @@ export default function AnnotatePage() {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [accessSettingsOpen, setAccessSettingsOpen] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
+    // Reviewer Mode (admin adjudication of annotator conflicts).
+    const [reviewMode, setReviewMode] = useState(false);
+    const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+    const [reviewData, setReviewData] = useState<ReviewData | null>(null);
+    const [conflictsOnly, setConflictsOnly] = useState(true);
     const [showSaved, setShowSaved] = useState(false);
     const savedTimer = useRef<ReturnType<typeof setTimeout>>();
     const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+    const gtSaveTimer = useRef<ReturnType<typeof setTimeout>>();
     const { toast } = useToast();
     const dataFileInputRef = useRef<HTMLInputElement>(null);
     const [user, setUser] = useState<string | null>(null);
@@ -139,6 +154,7 @@ export default function AnnotatePage() {
     useEffect(() => () => {
         clearTimeout(savedTimer.current);
         clearTimeout(saveTimer.current);
+        clearTimeout(gtSaveTimer.current);
     }, []);
 
     const flashSaved = () => {
@@ -168,6 +184,71 @@ export default function AnnotatePage() {
         clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(() => saveAnnotation(taskId, results), 500);
     };
+
+    /** Admin: load every annotator's results + adjudications (identities are
+     * masked server-side when blind adjudication is on). */
+    const fetchReview = useCallback(async (): Promise<ReviewData> => {
+        const res = await fetch(api('/api/review'));
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? 'Could not load review data.');
+        setReviewData(data as ReviewData);
+        return data as ReviewData;
+    }, []);
+
+    /** Persist one task's ground-truth decision. */
+    const saveAdjudication = useCallback(async (taskId: number, results: AnnotationResult[]) => {
+        try {
+            const res = await fetch(api('/api/review'), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ taskId, results }),
+            });
+            if (res.ok) flashSaved();
+        } catch (error) {
+            console.error('Could not save adjudication', error);
+        }
+    }, []);
+
+    const handleGroundTruthChange = (results: AnnotationResult[]) => {
+        const taskId = taskIds[currentIndex];
+        if (taskId == null) return;
+        setReviewData((prev) =>
+            prev ? { ...prev, adjudications: { ...prev.adjudications, [taskId]: results } } : prev,
+        );
+        clearTimeout(gtSaveTimer.current);
+        gtSaveTimer.current = setTimeout(() => saveAdjudication(taskId, results), 500);
+    };
+
+    /** Save the blind setting, (re)load review data, and enter Reviewer Mode.
+     * Rethrows so the settings dialog stays open on failure. */
+    const handleReviewConfirm = async (blind: boolean) => {
+        try {
+            const res = await fetch(api('/api/review'), {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ blind }),
+            });
+            if (!res.ok) throw new Error((await res.json()).error ?? 'Could not save review settings.');
+            const fresh = await fetchReview();
+            if (!reviewMode) {
+                setReviewMode(true);
+                // Start the review stream at the first conflict awaiting a decision.
+                const firstConflict = taskIds.findIndex(
+                    (tid) => caseReviewStatus(parsedConfig, fresh.annotations[tid], fresh.adjudications[tid]) === 'conflict',
+                );
+                if (firstConflict >= 0) setCurrentIndex(firstConflict);
+            }
+        } catch (error) {
+            toast({
+                variant: 'destructive',
+                title: 'Reviewer Mode',
+                description: error instanceof Error ? error.message : 'Please try again.',
+            });
+            throw error;
+        }
+    };
+
+    const reviewBlind = reviewData?.settings.blind ?? true;
 
     const handleLogout = async () => {
         try {
@@ -301,14 +382,48 @@ export default function AnnotatePage() {
         }
     };
 
+    /** Review status per case (parallel to data/taskIds); empty outside Reviewer Mode. */
+    const caseStatuses = useMemo<CaseReviewStatus[]>(() => {
+        if (!reviewMode || !reviewData || !parsedConfig.valid) return [];
+        return taskIds.map((tid) =>
+            caseReviewStatus(parsedConfig, reviewData.annotations[tid], reviewData.adjudications[tid]),
+        );
+    }, [reviewMode, reviewData, taskIds, parsedConfig]);
+
+    const reviewStats = useMemo(() => agreementStats(caseStatuses), [caseStatuses]);
+
+    /** The indices Prev/Next move through: all cases, or only conflicted ones
+     * when the Reviewer Mode filter is on. */
+    const visibleIndices = useMemo(() => {
+        const all = data.map((_, i) => i);
+        if (!reviewMode || !conflictsOnly) return all;
+        return all.filter((i) => caseStatuses[i] === 'conflict' || caseStatuses[i] === 'resolved');
+    }, [data, reviewMode, conflictsOnly, caseStatuses]);
+
+    const hasPrevVisible = visibleIndices.some((i) => i < currentIndex);
+    const hasNextVisible = visibleIndices.some((i) => i > currentIndex);
+
     const handleNext = () => {
-        if (currentIndex < data.length - 1) setCurrentIndex(currentIndex + 1);
-        else toast({ title: "End of Data", description: "You have reached the last case." });
+        const next = visibleIndices.find((i) => i > currentIndex);
+        if (next != null) setCurrentIndex(next);
     };
 
     const handlePrev = () => {
-        if (currentIndex > 0) setCurrentIndex(currentIndex - 1);
-        else toast({ title: "Start of Data", description: "You are at the first case." });
+        const prev = [...visibleIndices].reverse().find((i) => i < currentIndex);
+        if (prev != null) setCurrentIndex(prev);
+    };
+
+    /** Move to the next conflict still awaiting a ground-truth decision, wrapping. */
+    const handleNextConflict = () => {
+        const n = data.length;
+        for (let step = 1; step <= n; step++) {
+            const idx = (currentIndex + step) % n;
+            if (caseStatuses[idx] === 'conflict') {
+                setCurrentIndex(idx);
+                return;
+            }
+        }
+        toast({ title: 'No pending conflicts', description: 'Every conflicted case has been adjudicated.' });
     };
 
     const isAnnotated = (c: CaseData) => c.results.length > 0;
@@ -402,6 +517,17 @@ export default function AnnotatePage() {
         <ExportDialog open={exportOpen} onOpenChange={setExportOpen} />
     ) : null;
 
+    const reviewSettingsDialog = isAdmin ? (
+        <ReviewSettingsDialog
+            open={reviewDialogOpen}
+            onOpenChange={setReviewDialogOpen}
+            active={reviewMode}
+            blind={reviewBlind}
+            onConfirm={handleReviewConfirm}
+            onExit={() => setReviewMode(false)}
+        />
+    ) : null;
+
     if (loading || !user) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-background">
@@ -461,9 +587,28 @@ export default function AnnotatePage() {
             {settingsDialog}
             {accessSettingsDialog}
             {exportDialog}
+            {reviewSettingsDialog}
             <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b">
                 <div className="mx-auto w-full max-w-[1800px] px-4 h-14 flex items-center justify-between">
-                    <h1 className="text-xl font-bold text-primary">BMI Annotation Tool</h1>
+                    <div className="flex min-w-0 items-center gap-3">
+                        <h1 className="truncate text-xl font-bold text-primary">BMI Annotation Tool</h1>
+                        {isAdmin && (
+                            <Button
+                                size="sm"
+                                variant={reviewMode ? 'default' : 'outline'}
+                                className={cn(reviewMode && 'bg-amber-600 text-white hover:bg-amber-700')}
+                                aria-pressed={reviewMode}
+                                onClick={() => setReviewDialogOpen(true)}
+                            >
+                                <ClipboardCheck className="mr-1.5 h-4 w-4" /> Reviewer Mode
+                            </Button>
+                        )}
+                        {reviewMode && (
+                            <Badge variant="secondary" className="hidden shrink-0 sm:inline-flex">
+                                {reviewBlind ? 'Blind' : 'Identities shown'}
+                            </Badge>
+                        )}
+                    </div>
                     <div className="flex items-center gap-3">
                         <input type="file" ref={dataFileInputRef} onChange={handleFileImport} className="hidden" accept=".csv,.xlsx,.xls,.json" />
                         {isAdmin && (
@@ -496,13 +641,25 @@ export default function AnnotatePage() {
             <main className="flex-1 mx-auto w-full max-w-[1800px] p-3 lg:p-4">
                 <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
                     <div className="md:col-span-2 lg:col-span-3 flex flex-col gap-4">
-                        <Annotator
-                            key={`${currentCase.ID}-${configXml}`}
-                            caseData={currentCase}
-                            config={parsedConfig}
-                            adminKeywords={keywords}
-                            onChange={handleResultsChange}
-                        />
+                        {reviewMode && reviewData ? (
+                            <ReviewWorkspace
+                                key={`${currentCase.ID}-${configXml}-review`}
+                                caseData={currentCase}
+                                config={parsedConfig}
+                                annotators={reviewData.annotators}
+                                annotationsByKey={reviewData.annotations[taskIds[currentIndex]] ?? {}}
+                                groundTruth={reviewData.adjudications[taskIds[currentIndex]] ?? []}
+                                onGroundTruthChange={handleGroundTruthChange}
+                            />
+                        ) : (
+                            <Annotator
+                                key={`${currentCase.ID}-${configXml}`}
+                                caseData={currentCase}
+                                config={parsedConfig}
+                                adminKeywords={keywords}
+                                onChange={handleResultsChange}
+                            />
+                        )}
                     </div>
 
                     <div className="md:col-span-1 flex flex-col gap-4 md:sticky md:top-16 md:self-start">
@@ -518,42 +675,148 @@ export default function AnnotatePage() {
                                 </div>
                             </CardHeader>
                             <CardContent className="p-3 pt-0 flex flex-col gap-3">
-                                <div className="space-y-1.5">
-                                    <div className="flex justify-between text-sm text-muted-foreground">
-                                        <span>Annotated</span>
-                                        <span className="tabular-nums">{annotatedCount} / {data.length}</span>
+                                {reviewMode && (
+                                    <div className="flex rounded-md border p-0.5">
+                                        <Button
+                                            type="button"
+                                            variant={conflictsOnly ? 'ghost' : 'secondary'}
+                                            size="sm"
+                                            className="h-7 flex-1"
+                                            onClick={() => setConflictsOnly(false)}
+                                        >
+                                            Show all cases
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant={conflictsOnly ? 'secondary' : 'ghost'}
+                                            size="sm"
+                                            className="h-7 flex-1"
+                                            onClick={() => setConflictsOnly(true)}
+                                        >
+                                            Conflicts only
+                                        </Button>
                                     </div>
-                                    <Progress value={data.length ? (annotatedCount / data.length) * 100 : 0} className="h-2" />
-                                </div>
+                                )}
+                                {reviewMode ? (
+                                    <>
+                                        <div className="space-y-1.5">
+                                            <div className="flex justify-between text-sm text-muted-foreground">
+                                                <span>Conflicts resolved</span>
+                                                <span className="tabular-nums">
+                                                    {reviewStats.resolved} / {reviewStats.conflicts + reviewStats.resolved}
+                                                </span>
+                                            </div>
+                                            <Progress
+                                                value={
+                                                    reviewStats.conflicts + reviewStats.resolved > 0
+                                                        ? (reviewStats.resolved / (reviewStats.conflicts + reviewStats.resolved)) * 100
+                                                        : 0
+                                                }
+                                                className="h-2"
+                                            />
+                                        </div>
+                                        <div className="space-y-1 rounded-md border p-2">
+                                            <div className="flex justify-between gap-2 text-sm">
+                                                <span>Inter-annotator agreement</span>
+                                                <span className="font-medium tabular-nums">
+                                                    {reviewStats.agreement == null ? '—' : `${Math.round(reviewStats.agreement * 100)}%`}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">
+                                                {reviewStats.agreed} agreed · {reviewStats.conflicts + reviewStats.resolved} conflicts
+                                                {data.length - reviewStats.compared > 0 &&
+                                                    ` · ${data.length - reviewStats.compared} not double-annotated`}
+                                            </p>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="space-y-1.5">
+                                        <div className="flex justify-between text-sm text-muted-foreground">
+                                            <span>Annotated</span>
+                                            <span className="tabular-nums">{annotatedCount} / {data.length}</span>
+                                        </div>
+                                        <Progress value={data.length ? (annotatedCount / data.length) * 100 : 0} className="h-2" />
+                                    </div>
+                                )}
                                 <div className="flex gap-2">
-                                    <Button variant="outline" className="flex-1 min-w-0" onClick={handlePrev} disabled={currentIndex === 0}>
+                                    <Button variant="outline" className="flex-1 min-w-0" onClick={handlePrev} disabled={!hasPrevVisible}>
                                         <ChevronLeft className="mr-1 h-4 w-4 shrink-0" /> Prev
                                     </Button>
-                                    <Button variant="default" className="flex-1 min-w-0 bg-primary hover:bg-primary/90" onClick={handleNext} disabled={currentIndex === data.length - 1}>
+                                    <Button variant="default" className="flex-1 min-w-0 bg-primary hover:bg-primary/90" onClick={handleNext} disabled={!hasNextVisible}>
                                         Next <ChevronRight className="ml-1 h-4 w-4 shrink-0" />
                                     </Button>
                                 </div>
-                                <Button variant="outline" className="w-full" onClick={handleNextUnannotated} disabled={annotatedCount === data.length}>
-                                    <SkipForward className="mr-2 h-4 w-4 shrink-0" /> Next unannotated
-                                </Button>
-                                <form
-                                    className="flex gap-2"
-                                    onSubmit={(e) => { e.preventDefault(); handleJump(); }}
-                                >
-                                    <Input
-                                        type="number"
-                                        min={1}
-                                        max={data.length}
-                                        value={jumpValue}
-                                        onChange={(e) => setJumpValue(e.target.value)}
-                                        placeholder={`Go to case (1–${data.length})`}
-                                        className="h-9"
-                                        aria-label="Jump to case number"
-                                    />
-                                    <Button type="submit" variant="outline" className="h-9 shrink-0" disabled={!jumpValue}>
-                                        Go
+                                {reviewMode ? (
+                                    <Button variant="outline" className="w-full" onClick={handleNextConflict} disabled={reviewStats.conflicts === 0}>
+                                        <SkipForward className="mr-2 h-4 w-4 shrink-0" /> Next unresolved conflict
                                     </Button>
-                                </form>
+                                ) : (
+                                    <Button variant="outline" className="w-full" onClick={handleNextUnannotated} disabled={annotatedCount === data.length}>
+                                        <SkipForward className="mr-2 h-4 w-4 shrink-0" /> Next unannotated
+                                    </Button>
+                                )}
+                                {reviewMode ? (
+                                    <div className="space-y-1.5">
+                                        <span className="text-sm text-muted-foreground">Go to case</span>
+                                        {visibleIndices.length === 0 ? (
+                                            <p className="text-xs text-muted-foreground">No conflicted cases yet.</p>
+                                        ) : (
+                                            <div className="grid max-h-44 grid-cols-5 gap-1 overflow-auto pr-1">
+                                                {visibleIndices.map((i) => (
+                                                    <button
+                                                        key={i}
+                                                        type="button"
+                                                        onClick={() => setCurrentIndex(i)}
+                                                        aria-label={`Go to case ${i + 1}`}
+                                                        className={cn(
+                                                            'flex h-7 items-center justify-center gap-1 rounded border text-xs tabular-nums hover:bg-muted',
+                                                            i === currentIndex && 'ring-2 ring-primary',
+                                                        )}
+                                                    >
+                                                        <span
+                                                            className="h-1.5 w-1.5 shrink-0 rounded-full"
+                                                            style={{ backgroundColor: STATUS_COLORS[caseStatuses[i] ?? 'unannotated'] }}
+                                                        />
+                                                        {i + 1}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                            <span className="inline-flex items-center gap-1">
+                                                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: STATUS_COLORS.agreed }} />
+                                                Agreed / resolved
+                                            </span>
+                                            <span className="inline-flex items-center gap-1">
+                                                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: STATUS_COLORS.conflict }} />
+                                                Conflict pending
+                                            </span>
+                                            <span className="inline-flex items-center gap-1">
+                                                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: STATUS_COLORS.unannotated }} />
+                                                Unannotated
+                                            </span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <form
+                                        className="flex gap-2"
+                                        onSubmit={(e) => { e.preventDefault(); handleJump(); }}
+                                    >
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            max={data.length}
+                                            value={jumpValue}
+                                            onChange={(e) => setJumpValue(e.target.value)}
+                                            placeholder={`Go to case (1–${data.length})`}
+                                            className="h-9"
+                                            aria-label="Jump to case number"
+                                        />
+                                        <Button type="submit" variant="outline" className="h-9 shrink-0" disabled={!jumpValue}>
+                                            Go
+                                        </Button>
+                                    </form>
+                                )}
                             </CardContent>
                         </Card>
                     </div>

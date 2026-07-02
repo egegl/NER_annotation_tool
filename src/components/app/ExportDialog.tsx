@@ -36,6 +36,7 @@ export function ExportDialog({ open, onOpenChange }: Props) {
   const { toast } = useToast();
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [includeGroundTruth, setIncludeGroundTruth] = useState(false);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -71,7 +72,7 @@ export function ExportDialog({ open, onOpenChange }: Props) {
       const response = await fetch(api('/api/export'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userIds: Array.from(selected), format }),
+        body: JSON.stringify({ userIds: Array.from(selected), format, includeGroundTruth }),
       });
       if (!response.ok) {
         const result = await response.json().catch(() => ({}));
@@ -148,17 +149,29 @@ export function ExportDialog({ open, onOpenChange }: Props) {
               </div>
             ))}
           </div>
+
+          <div className="flex items-center gap-2 border-t pt-3">
+            <Checkbox
+              id="export-ground-truth"
+              checked={includeGroundTruth}
+              onCheckedChange={(v) => setIncludeGroundTruth(v === true)}
+            />
+            <Label htmlFor="export-ground-truth" className="flex-1 cursor-pointer font-normal">
+              Include adjudicated ground truth
+              <span className="ml-2 text-xs text-muted-foreground">(as “ground_truth”)</span>
+            </Label>
+          </div>
         </div>
 
         <DialogFooter className="gap-2 sm:justify-end">
           <Button
             variant="outline"
-            disabled={exporting || selected.size === 0}
+            disabled={exporting || (selected.size === 0 && !includeGroundTruth)}
             onClick={() => handleExport('csv')}
           >
             <FileDown className="mr-2 h-4 w-4" /> CSV
           </Button>
-          <Button disabled={exporting || selected.size === 0} onClick={() => handleExport('json')}>
+          <Button disabled={exporting || (selected.size === 0 && !includeGroundTruth)} onClick={() => handleExport('json')}>
             <FileDown className="mr-2 h-4 w-4" /> Label Studio JSON
           </Button>
         </DialogFooter>
