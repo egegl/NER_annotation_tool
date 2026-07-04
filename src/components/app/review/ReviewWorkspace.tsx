@@ -154,12 +154,7 @@ function GroundTruthSpans({ control }: { control: ControlTag }) {
     .filter((r) => r.type === 'labels' && r.from_name === control.name)
     .sort((a, b) => (a.value.start ?? 0) - (b.value.start ?? 0));
   if (own.length === 0) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        No ground-truth spans yet — accept an annotator, or click a label above the note and
-        select text.
-      </p>
-    );
+    return null;
   }
   return (
     <div className="flex flex-wrap gap-1">
@@ -275,12 +270,7 @@ function QuestionComparison({
         {control.type === 'Labels' ? (
           <GroundTruthSpans control={control} />
         ) : control.perRegion ? (
-          <div className="space-y-1">
-            <AnswerDisplayForGroundTruth control={control} />
-            <p className="text-xs text-muted-foreground">
-              Per-region answers attach to ground-truth regions (see the Regions panel).
-            </p>
-          </div>
+          <AnswerDisplayForGroundTruth control={control} />
         ) : control.type === 'Choices' ? (
           <ChoicesControl control={control} />
         ) : control.type === 'TextArea' ? (

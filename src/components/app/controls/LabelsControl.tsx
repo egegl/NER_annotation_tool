@@ -33,11 +33,6 @@ export function LabelsControl({ control }: { control: ControlTag }) {
           </button>
         );
       })}
-      <span className="text-xs text-muted-foreground">
-        {armed?.control === control.name
-          ? 'Select text to apply this label'
-          : 'Click a label, then select text'}
-      </span>
     </div>
   );
 }

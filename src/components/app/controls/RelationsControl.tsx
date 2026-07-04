@@ -29,9 +29,6 @@ export function RelationsControl({ control }: { control: ControlTag }) {
           </button>
         );
       })}
-      <span className="text-xs text-muted-foreground">
-        Select a region below → “Link from here” → click another region.
-      </span>
     </div>
   );
 }

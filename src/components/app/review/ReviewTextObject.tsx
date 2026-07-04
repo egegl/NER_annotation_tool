@@ -253,7 +253,6 @@ export function ReviewTextObject({
             />
             Overlap
           </span>
-          <span>· ground-truth spans use their label colors</span>
         </div>
       )}
 

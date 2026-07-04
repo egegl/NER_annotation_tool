@@ -45,11 +45,7 @@ export function RegionPanel() {
   const hasRelations = config.controls.some((c) => c.type === 'Relations');
 
   if (spanRegions.length === 0 && relations.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No regions yet. Select text and apply a label to create one.
-      </p>
-    );
+    return null;
   }
 
   const regionById = (id: string) => spanRegions.find((r) => r.id === id);
