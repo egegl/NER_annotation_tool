@@ -27,7 +27,7 @@ import {
     type CaseReviewStatus,
     type ReviewData,
 } from '@/lib/review';
-import { parseLabelConfig } from '@/lib/labelConfig';
+import { parseLabelConfig, isCaseAnnotated } from '@/lib/labelConfig';
 import {
     rowsToCases,
     tasksToCases,
@@ -426,8 +426,11 @@ export default function AnnotatePage() {
         toast({ title: 'No pending conflicts', description: 'Every conflicted case has been adjudicated.' });
     };
 
-    const isAnnotated = (c: CaseData) => c.results.length > 0;
-    const annotatedCount = useMemo(() => data.filter(isAnnotated).length, [data]);
+    const isAnnotated = useCallback(
+        (c: CaseData) => isCaseAnnotated(parsedConfig, c),
+        [parsedConfig],
+    );
+    const annotatedCount = useMemo(() => data.filter(isAnnotated).length, [data, isAnnotated]);
 
     /** Jump to the case number typed in the input (1-based). */
     const handleJump = () => {

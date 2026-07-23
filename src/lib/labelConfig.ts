@@ -1,4 +1,5 @@
 import type {
+  CaseData,
   ConfigNode,
   ControlOption,
   ControlTag,
@@ -6,6 +7,7 @@ import type {
   ObjectTag,
   ParsedConfig,
 } from '@/types';
+import { isRegion } from '@/types';
 import { generateColor, parseColor } from '@/lib/color';
 
 const OBJECT_TAGS = new Set(['Text']);
@@ -78,6 +80,7 @@ const buildControl = (
     name: a.name ?? '',
     toName: a.toName,
     perRegion: a.perRegion === 'true',
+    required: a.required === 'true',
     choice: a.choice === 'multiple' ? ('multiple' as const) : ('single' as const),
     options: [] as ControlOption[],
   };
@@ -228,6 +231,39 @@ export const nerHeaderNodeFor = (
   };
   visit(tree);
   return result;
+};
+
+/** Controls flagged `required="true"` in the labeling config. */
+export const requiredControls = (config: ParsedConfig): ControlTag[] =>
+  config.controls.filter((c) => c.required);
+
+/**
+ * A control is answered when the case holds at least one non-empty region
+ * produced by it. (Only non-empty values are ever committed, so presence of a
+ * region with a matching `from_name` means the control has a real answer.)
+ */
+const isControlAnswered = (control: ControlTag, caseData: CaseData): boolean =>
+  caseData.results.some((r) => isRegion(r) && r.from_name === control.name);
+
+/** Required controls that the case has not answered yet. */
+export const unansweredRequiredControls = (
+  config: ParsedConfig,
+  caseData: CaseData,
+): ControlTag[] =>
+  requiredControls(config).filter((c) => !isControlAnswered(c, caseData));
+
+/**
+ * Whether a case counts as annotated. When the config marks any control as
+ * required, every required control must be answered; otherwise a case is
+ * annotated once it has any result at all.
+ */
+export const isCaseAnnotated = (
+  config: ParsedConfig,
+  caseData: CaseData,
+): boolean => {
+  const required = requiredControls(config);
+  if (required.length === 0) return caseData.results.length > 0;
+  return required.every((c) => isControlAnswered(c, caseData));
 };
 
 /** Find an option (with its color) by value across all controls. */

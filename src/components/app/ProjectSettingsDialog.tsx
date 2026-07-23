@@ -115,6 +115,14 @@ export function ProjectSettingsDialog({ open, onOpenChange, currentXml, onSave, 
               className="font-mono text-sm h-[320px]"
               aria-label="Labeling config XML"
             />
+            {!readOnly && (
+              <p className="text-xs text-muted-foreground">
+                Add <code className="rounded bg-muted px-1 py-0.5">required=&quot;true&quot;</code> to a
+                control (e.g. <code className="rounded bg-muted px-1 py-0.5">&lt;Choices&gt;</code>,{' '}
+                <code className="rounded bg-muted px-1 py-0.5">&lt;Labels&gt;</code>) to make it
+                mandatory. A case is marked annotated only once every required control is answered.
+              </p>
+            )}
             {parsed.valid ? (
               <p className="flex items-center gap-2 text-sm text-green-600">
                 <CheckCircle2 className="h-4 w-4" /> Configuration is valid.

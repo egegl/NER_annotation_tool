@@ -13,7 +13,7 @@ export const TEMPLATES: ConfigTemplate[] = [
     description: 'Assign one label to the whole text (e.g. sentiment).',
     xml: `<View>
   <Text name="text" value="$text" />
-  <Choices name="label" toName="text" choice="single">
+  <Choices name="label" toName="text" choice="single" required="true">
     <Choice value="Positive" />
     <Choice value="Negative" />
     <Choice value="Neutral" />

@@ -10,6 +10,8 @@ import { TextAreaControl } from './controls/TextAreaControl';
 import { RatingControl } from './controls/RatingControl';
 import { RelationsControl } from './controls/RelationsControl';
 import { RegionPanel } from './controls/RegionPanel';
+import { RequiredMark } from './controls/RequiredMark';
+import { RequiredStatus } from './controls/RequiredStatus';
 import { nerHeaderNodeFor } from '@/lib/labelConfig';
 
 interface AnnotatorProps {
@@ -84,15 +86,33 @@ export function Annotator({ caseData, config, onChange, adminKeywords = '', prev
         return null;
       case 'Choices': {
         const c = controlByName(node.attrs.name);
-        return c && !c.perRegion ? <ChoicesControl key={key} control={c} /> : null;
+        if (!c || c.perRegion) return null;
+        return (
+          <div key={key} className="space-y-1.5">
+            <RequiredMark control={c} />
+            <ChoicesControl control={c} />
+          </div>
+        );
       }
       case 'TextArea': {
         const c = controlByName(node.attrs.name);
-        return c && !c.perRegion ? <TextAreaControl key={key} control={c} /> : null;
+        if (!c || c.perRegion) return null;
+        return (
+          <div key={key} className="space-y-1.5">
+            <RequiredMark control={c} />
+            <TextAreaControl control={c} />
+          </div>
+        );
       }
       case 'Rating': {
         const c = controlByName(node.attrs.name);
-        return c && !c.perRegion ? <RatingControl key={key} control={c} /> : null;
+        if (!c || c.perRegion) return null;
+        return (
+          <div key={key} className="space-y-1.5">
+            <RequiredMark control={c} />
+            <RatingControl control={c} />
+          </div>
+        );
       }
       case 'Relations': {
         const c = controlByName(node.attrs.name) ?? config.controls.find((x) => x.type === 'Relations');
@@ -120,7 +140,10 @@ export function Annotator({ caseData, config, onChange, adminKeywords = '', prev
   return (
     <AnnotatorProvider config={config} caseData={caseData} onChange={onChange} adminKeywords={adminKeywords} previewMode={previewMode}>
       <Card className="shadow-lg">
-        <CardContent className="p-3">{config.tree && renderNode(config.tree, 'root')}</CardContent>
+        <CardContent className="p-3 space-y-3">
+          {config.tree && renderNode(config.tree, 'root')}
+          <RequiredStatus />
+        </CardContent>
       </Card>
 
       {showPanel && (

@@ -106,6 +106,8 @@ export interface ControlTag {
   /** Object name this control annotates. Relations has none. */
   toName?: string;
   perRegion: boolean;
+  /** Must be answered before the case counts as annotated (`required="true"`). */
+  required: boolean;
   /** 'single' | 'multiple' for Choices/Labels. */
   choice: 'single' | 'multiple';
   options: ControlOption[];
