@@ -245,13 +245,6 @@ export const requiredControls = (config: ParsedConfig): ControlTag[] =>
 const isControlAnswered = (control: ControlTag, caseData: CaseData): boolean =>
   caseData.results.some((r) => isRegion(r) && r.from_name === control.name);
 
-/** Required controls that the case has not answered yet. */
-export const unansweredRequiredControls = (
-  config: ParsedConfig,
-  caseData: CaseData,
-): ControlTag[] =>
-  requiredControls(config).filter((c) => !isControlAnswered(c, caseData));
-
 /**
  * Whether a case counts as annotated. When the config marks any control as
  * required, every required control must be answered; otherwise a case is

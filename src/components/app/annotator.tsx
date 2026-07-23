@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import type { AnnotationResult, CaseData, ConfigNode, ParsedConfig } from '@/types';
+import type { AnnotationResult, CaseData, ConfigNode, ControlTag, ParsedConfig } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AnnotatorProvider } from './controls/context';
 import { TextObject } from './controls/TextObject';
@@ -11,7 +11,6 @@ import { RatingControl } from './controls/RatingControl';
 import { RelationsControl } from './controls/RelationsControl';
 import { RegionPanel } from './controls/RegionPanel';
 import { RequiredMark } from './controls/RequiredMark';
-import { RequiredStatus } from './controls/RequiredStatus';
 import { nerHeaderNodeFor } from '@/lib/labelConfig';
 
 interface AnnotatorProps {
@@ -61,6 +60,28 @@ export function Annotator({ caseData, config, onChange, adminKeywords = '', prev
       .filter((n): n is ConfigNode => n !== null),
   );
 
+  // Map each required doc-level control's preceding <Header> (its question text)
+  // to the control, so the "Required" tag renders inline with the question
+  // instead of on its own line above the control.
+  const DOC_CONTROL_TAGS = new Set(['Choices', 'TextArea', 'Rating']);
+  const requiredHeaderFor = new Map<ConfigNode, ControlTag>();
+  const mapRequiredHeaders = (node: ConfigNode) => {
+    const kids = node.children;
+    for (let i = 0; i < kids.length; i++) {
+      const child = kids[i];
+      if (DOC_CONTROL_TAGS.has(child.tag)) {
+        const ctrl = controlByName(child.attrs.name);
+        const prev = kids[i - 1];
+        if (ctrl?.required && !ctrl.perRegion && prev?.tag === 'Header') {
+          requiredHeaderFor.set(prev, ctrl);
+        }
+      }
+      mapRequiredHeaders(child);
+    }
+  };
+  if (config.tree) mapRequiredHeaders(config.tree);
+  const controlsWithHeaderMark = new Set(requiredHeaderFor.values());
+
   const renderNode = (node: ConfigNode, key: string): React.ReactNode => {
     switch (node.tag) {
       case 'View':
@@ -69,13 +90,16 @@ export function Annotator({ caseData, config, onChange, adminKeywords = '', prev
             {node.children.map((c, i) => renderNode(c, `${key}-${i}`))}
           </div>
         );
-      case 'Header':
+      case 'Header': {
         if (nerHeaderNodes.has(node)) return null;
+        const reqControl = requiredHeaderFor.get(node);
         return (
-          <h3 key={key} className="text-base font-bold text-foreground">
+          <h3 key={key} className="flex items-center gap-2 text-base font-bold text-foreground">
             {node.attrs.value}
+            {reqControl && <RequiredMark control={reqControl} />}
           </h3>
         );
+      }
       case 'Text': {
         const obj = objectByName(node.attrs.name);
         return obj ? <TextObject key={key} object={obj} /> : null;
@@ -87,6 +111,9 @@ export function Annotator({ caseData, config, onChange, adminKeywords = '', prev
       case 'Choices': {
         const c = controlByName(node.attrs.name);
         if (!c || c.perRegion) return null;
+        // The "Required" tag renders next to the question <Header> when there is
+        // one; otherwise it falls back to just above the control.
+        if (controlsWithHeaderMark.has(c)) return <ChoicesControl key={key} control={c} />;
         return (
           <div key={key} className="space-y-1.5">
             <RequiredMark control={c} />
@@ -97,6 +124,7 @@ export function Annotator({ caseData, config, onChange, adminKeywords = '', prev
       case 'TextArea': {
         const c = controlByName(node.attrs.name);
         if (!c || c.perRegion) return null;
+        if (controlsWithHeaderMark.has(c)) return <TextAreaControl key={key} control={c} />;
         return (
           <div key={key} className="space-y-1.5">
             <RequiredMark control={c} />
@@ -107,6 +135,7 @@ export function Annotator({ caseData, config, onChange, adminKeywords = '', prev
       case 'Rating': {
         const c = controlByName(node.attrs.name);
         if (!c || c.perRegion) return null;
+        if (controlsWithHeaderMark.has(c)) return <RatingControl key={key} control={c} />;
         return (
           <div key={key} className="space-y-1.5">
             <RequiredMark control={c} />
@@ -142,7 +171,6 @@ export function Annotator({ caseData, config, onChange, adminKeywords = '', prev
       <Card className="shadow-lg">
         <CardContent className="p-3 space-y-3">
           {config.tree && renderNode(config.tree, 'root')}
-          <RequiredStatus />
         </CardContent>
       </Card>
 
