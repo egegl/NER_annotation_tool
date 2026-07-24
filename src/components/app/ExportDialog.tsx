@@ -22,9 +22,20 @@ interface UserListItem {
   role: 'admin' | 'annotator';
 }
 
+interface ProjectListItem {
+  id: number;
+  fileName: string;
+  createdAt: string;
+  createdBy: string | null;
+  assignedCount: number;
+  taskCount: number;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Project to pre-select for export (the admin's own project). */
+  defaultProjectId: number | null;
 }
 
 /**
@@ -32,10 +43,12 @@ interface Props {
  * annotations end up in the file, then downloads a combined Label Studio JSON or
  * a per-(task,user) CSV from /api/export.
  */
-export function ExportDialog({ open, onOpenChange }: Props) {
+export function ExportDialog({ open, onOpenChange, defaultProjectId }: Props) {
   const { toast } = useToast();
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [projectId, setProjectId] = useState<number | null>(defaultProjectId);
   const [includeGroundTruth, setIncludeGroundTruth] = useState(false);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -43,16 +56,22 @@ export function ExportDialog({ open, onOpenChange }: Props) {
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    fetch(api('/api/admin/users'))
-      .then((r) => r.json())
-      .then((data) => {
-        const list: UserListItem[] = data.users ?? [];
+    Promise.all([
+      fetch(api('/api/admin/users')).then((r) => r.json()),
+      fetch(api('/api/admin/projects')).then((r) => r.json()),
+    ])
+      .then(([userData, projectData]) => {
+        const list: UserListItem[] = userData.users ?? [];
         setUsers(list);
         setSelected(new Set(list.map((u) => u.id))); // default: everyone included
+        const projectList: ProjectListItem[] = projectData.projects ?? [];
+        setProjects(projectList);
+        const fallback = projectData.currentProjectId ?? projectList[0]?.id ?? null;
+        setProjectId(defaultProjectId ?? fallback);
       })
-      .catch(() => toast({ variant: 'destructive', title: 'Could not load users.' }))
+      .catch(() => toast({ variant: 'destructive', title: 'Could not load export options.' }))
       .finally(() => setLoading(false));
-  }, [open, toast]);
+  }, [open, toast, defaultProjectId]);
 
   const toggle = (id: number) =>
     setSelected((prev) => {
@@ -67,12 +86,13 @@ export function ExportDialog({ open, onOpenChange }: Props) {
     setSelected(allSelected ? new Set() : new Set(users.map((u) => u.id)));
 
   const handleExport = async (format: 'json' | 'csv') => {
+    if (projectId == null) return;
     setExporting(true);
     try {
       const response = await fetch(api('/api/export'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userIds: Array.from(selected), format, includeGroundTruth }),
+        body: JSON.stringify({ projectId, userIds: Array.from(selected), format, includeGroundTruth }),
       });
       if (!response.ok) {
         const result = await response.json().catch(() => ({}));
@@ -116,6 +136,26 @@ export function ExportDialog({ open, onOpenChange }: Props) {
         </DialogHeader>
 
         <div className="space-y-3">
+          <div className="space-y-2">
+            <Label htmlFor="export-project" className="text-sm font-medium">
+              Project
+            </Label>
+            <select
+              id="export-project"
+              value={projectId ?? ''}
+              onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : null)}
+              disabled={loading || projects.length === 0}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {projects.length === 0 && <option value="">No projects yet</option>}
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.fileName} · {p.taskCount} case{p.taskCount === 1 ? '' : 's'}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex items-center justify-between border-b pb-2">
             <span className="text-sm font-medium">Annotators</span>
             <button
@@ -166,12 +206,12 @@ export function ExportDialog({ open, onOpenChange }: Props) {
         <DialogFooter className="gap-2 sm:justify-end">
           <Button
             variant="outline"
-            disabled={exporting || (selected.size === 0 && !includeGroundTruth)}
+            disabled={exporting || projectId == null || (selected.size === 0 && !includeGroundTruth)}
             onClick={() => handleExport('csv')}
           >
             <FileDown className="mr-2 h-4 w-4" /> CSV
           </Button>
-          <Button disabled={exporting || (selected.size === 0 && !includeGroundTruth)} onClick={() => handleExport('json')}>
+          <Button disabled={exporting || projectId == null || (selected.size === 0 && !includeGroundTruth)} onClick={() => handleExport('json')}>
             <FileDown className="mr-2 h-4 w-4" /> Label Studio JSON
           </Button>
         </DialogFooter>

@@ -11,10 +11,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { FileUp, FileDown, ChevronLeft, ChevronRight, FileText, UploadCloud, LogOut, Settings2, Check, Users, SkipForward, ClipboardCheck } from 'lucide-react';
+import { FileUp, FileDown, ChevronLeft, ChevronRight, FileText, UploadCloud, LogOut, Settings2, Check, Users, SkipForward, ClipboardCheck, Layers } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Annotator } from '@/components/app/annotator';
 import { ProjectSettingsDialog } from '@/components/app/ProjectSettingsDialog';
+import { ReplaceProjectDialog } from '@/components/app/ReplaceProjectDialog';
+import { ManageProjectsDialog } from '@/components/app/ManageProjectsDialog';
 import { AccessSettingsDialog } from '@/components/app/AccessSettingsDialog';
 import { ExportDialog } from '@/components/app/ExportDialog';
 import { SelectTextColumnDialog } from '@/components/app/SelectTextColumnDialog';
@@ -40,16 +42,6 @@ import type { LSTask } from '@/lib/io';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/basePath';
 import defaultLabeling from '@/config/labeling.json';
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
 const DEFAULT_XML = (defaultLabeling as { xml: string }).xml;
 
@@ -64,8 +56,13 @@ export default function AnnotatePage() {
     // Admin-set always-highlight keywords, shared with all annotators.
     const [keywords, setKeywords] = useState('');
     const [projectExists, setProjectExists] = useState(false);
+    // The admin's own assigned project id (drives selector defaults).
+    const [myProjectId, setMyProjectId] = useState<number | null>(null);
+    // While in Reviewer Mode, the project being reviewed (may differ from myProjectId).
+    const [reviewProjectId, setReviewProjectId] = useState<number | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [accessSettingsOpen, setAccessSettingsOpen] = useState(false);
+    const [manageProjectsOpen, setManageProjectsOpen] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
     // Reviewer Mode (admin adjudication of annotator conflicts).
     const [reviewMode, setReviewMode] = useState(false);
@@ -111,6 +108,7 @@ export default function AnnotatePage() {
 
         if (!projectData.project) {
             setProjectExists(false);
+            setMyProjectId(null);
             setData([]);
             setTaskIds([]);
             setFileName('');
@@ -121,6 +119,7 @@ export default function AnnotatePage() {
         const tasks: { id: number; ID: string; data: Record<string, string> }[] = projectData.tasks ?? [];
 
         setProjectExists(true);
+        setMyProjectId(projectData.project.id ?? null);
         setConfigXml(projectData.project.configXml);
         setKeywords(projectData.project.keywords ?? '');
         setFileName(projectData.project.fileName);
@@ -185,14 +184,22 @@ export default function AnnotatePage() {
         saveTimer.current = setTimeout(() => saveAnnotation(taskId, results), 500);
     };
 
-    /** Admin: load every annotator's results + adjudications (identities are
-     * masked server-side when blind adjudication is on). */
-    const fetchReview = useCallback(async (): Promise<ReviewData> => {
-        const res = await fetch(api('/api/review'));
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? 'Could not load review data.');
-        setReviewData(data as ReviewData);
-        return data as ReviewData;
+    /** Admin: load one project's review stream — its config + tasks plus every
+     * annotator's results + adjudications (identities masked server-side when
+     * blind adjudication is on). Switches the workspace to that project. */
+    const loadReviewProject = useCallback(async (projectId: number): Promise<ReviewData> => {
+        const res = await fetch(api(`/api/review?projectId=${projectId}`));
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.error ?? 'Could not load review data.');
+
+        const tasks: { id: number; ID: string; data: Record<string, string> }[] = payload.tasks ?? [];
+        setConfigXml(payload.project.configXml);
+        setFileName(payload.project.fileName);
+        setTaskIds(tasks.map((t) => t.id));
+        setData(tasks.map((t) => ({ ID: t.ID, data: t.data, results: [] })));
+        setReviewData(payload as ReviewData);
+        setReviewProjectId(projectId);
+        return payload as ReviewData;
     }, []);
 
     /** Persist one task's ground-truth decision. */
@@ -219,25 +226,25 @@ export default function AnnotatePage() {
         gtSaveTimer.current = setTimeout(() => saveAdjudication(taskId, results), 500);
     };
 
-    /** Save the blind setting, (re)load review data, and enter Reviewer Mode.
-     * Rethrows so the settings dialog stays open on failure. */
-    const handleReviewConfirm = async (blind: boolean) => {
+    /** Save the blind setting for the chosen project, load its review stream, and
+     * enter Reviewer Mode. Rethrows so the settings dialog stays open on failure. */
+    const handleReviewConfirm = async (blind: boolean, projectId: number) => {
         try {
             const res = await fetch(api('/api/review'), {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ blind }),
+                body: JSON.stringify({ projectId, blind }),
             });
             if (!res.ok) throw new Error((await res.json()).error ?? 'Could not save review settings.');
-            const fresh = await fetchReview();
-            if (!reviewMode) {
-                setReviewMode(true);
-                // Start the review stream at the first conflict awaiting a decision.
-                const firstConflict = taskIds.findIndex(
-                    (tid) => caseReviewStatus(parsedConfig, fresh.annotations[tid], fresh.adjudications[tid]) === 'conflict',
-                );
-                if (firstConflict >= 0) setCurrentIndex(firstConflict);
-            }
+            const fresh = await loadReviewProject(projectId);
+            setReviewMode(true);
+            // Start the review stream at the first conflict awaiting a decision.
+            const freshConfig = parseLabelConfig(fresh.project?.configXml ?? configXml);
+            const freshTaskIds = (fresh.tasks ?? []).map((t) => t.id);
+            const firstConflict = freshTaskIds.findIndex(
+                (tid) => caseReviewStatus(freshConfig, fresh.annotations[tid], fresh.adjudications[tid]) === 'conflict',
+            );
+            setCurrentIndex(firstConflict >= 0 ? firstConflict : 0);
         } catch (error) {
             toast({
                 variant: 'destructive',
@@ -246,6 +253,13 @@ export default function AnnotatePage() {
             });
             throw error;
         }
+    };
+
+    /** Leave Reviewer Mode and restore the admin's own assigned project. */
+    const handleReviewExit = () => {
+        setReviewMode(false);
+        setReviewProjectId(null);
+        void loadProject();
     };
 
     const reviewBlind = reviewData?.settings.blind ?? true;
@@ -357,26 +371,33 @@ export default function AnnotatePage() {
             return;
         }
 
-        if (projectExists) {
-            // Replacing wipes everyone's annotations — confirm first.
-            setPendingUpload({ cases, fileName: name, keywords: adminKeywords });
-        } else {
-            void uploadProject(cases, name, adminKeywords);
-        }
+        // Choosing which accounts get this new file happens in the picker next.
+        setPendingUpload({ cases, fileName: name, keywords: adminKeywords });
     };
 
-    /** Admin: push the parsed project to the server (shared with all annotators). */
-    const uploadProject = async (cases: CaseData[], name: string, adminKeywords: string) => {
+    /** Admin: create a new project from the parsed file and assign the chosen
+     * accounts to it. Accounts left off keep their current project. */
+    const uploadProject = async (
+        cases: CaseData[],
+        name: string,
+        adminKeywords: string,
+        assignUserIds: number[],
+    ) => {
         try {
             const res = await fetch(api('/api/project'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fileName: name, configXml, keywords: adminKeywords, cases }),
+                body: JSON.stringify({ fileName: name, configXml, keywords: adminKeywords, cases, assignUserIds }),
             });
             const result = await res.json();
             if (!res.ok) throw new Error(result.error ?? 'Upload failed.');
+            // Reflects in the admin's own view only if they assigned themselves.
             await loadProject();
-            toast({ title: 'Project Uploaded', description: `${result.count} cases are now shared with all annotators.` });
+            const n = result.assigned ?? assignUserIds.length;
+            toast({
+                title: 'Project Uploaded',
+                description: `${result.count} cases uploaded and assigned to ${n} account${n === 1 ? '' : 's'}.`,
+            });
         } catch (error) {
             toast({ variant: 'destructive', title: 'Upload Failed', description: error instanceof Error ? error.message : undefined });
         }
@@ -458,31 +479,19 @@ export default function AnnotatePage() {
 
     const currentCase = data[currentIndex];
 
-    const replaceDialog = (
-        <AlertDialog open={!!pendingUpload} onOpenChange={(o) => { if (!o) setPendingUpload(null); }}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Replace the current project?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        Uploading <strong>{pendingUpload?.fileName}</strong> replaces the existing
-                        project and permanently deletes <strong>every annotator&apos;s</strong>{' '}
-                        annotations. This cannot be undone.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel onClick={() => setPendingUpload(null)}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                        onClick={() => {
-                            if (pendingUpload) void uploadProject(pendingUpload.cases, pendingUpload.fileName, pendingUpload.keywords);
-                            setPendingUpload(null);
-                        }}
-                    >
-                        Replace project
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-    );
+    const replaceDialog = pendingUpload ? (
+        <ReplaceProjectDialog
+            open={!!pendingUpload}
+            onOpenChange={(o) => { if (!o) setPendingUpload(null); }}
+            fileName={pendingUpload.fileName}
+            caseCount={pendingUpload.cases.length}
+            currentEmail={user}
+            onConfirm={async (assignUserIds) => {
+                await uploadProject(pendingUpload.cases, pendingUpload.fileName, pendingUpload.keywords, assignUserIds);
+                setPendingUpload(null);
+            }}
+        />
+    ) : null;
 
     const textColumnDialog = pendingImport ? (
         <SelectTextColumnDialog
@@ -517,7 +526,19 @@ export default function AnnotatePage() {
     ) : null;
 
     const exportDialog = isAdmin ? (
-        <ExportDialog open={exportOpen} onOpenChange={setExportOpen} />
+        <ExportDialog open={exportOpen} onOpenChange={setExportOpen} defaultProjectId={myProjectId} />
+    ) : null;
+
+    const manageProjectsDialog = isAdmin ? (
+        <ManageProjectsDialog
+            open={manageProjectsOpen}
+            onOpenChange={setManageProjectsOpen}
+            currentProjectId={myProjectId}
+            onDeleted={() => {
+                // If the project being reviewed was deleted, leave Reviewer Mode.
+                if (reviewMode && reviewProjectId != null) handleReviewExit();
+            }}
+        />
     ) : null;
 
     const reviewSettingsDialog = isAdmin ? (
@@ -526,8 +547,9 @@ export default function AnnotatePage() {
             onOpenChange={setReviewDialogOpen}
             active={reviewMode}
             blind={reviewBlind}
+            defaultProjectId={reviewProjectId ?? myProjectId}
             onConfirm={handleReviewConfirm}
-            onExit={() => setReviewMode(false)}
+            onExit={handleReviewExit}
         />
     ) : null;
 
@@ -544,8 +566,10 @@ export default function AnnotatePage() {
         return (
             <div className="flex items-center justify-center min-h-screen bg-background p-4">
                 {textColumnDialog}
+                {replaceDialog}
                 {settingsDialog}
                 {accessSettingsDialog}
+                {manageProjectsDialog}
                 <Card className="w-full max-w-lg text-center shadow-2xl transition-all hover:shadow-primary/20">
                     <CardHeader>
                         <div className="mx-auto bg-primary/10 p-4 rounded-full w-fit">
@@ -568,6 +592,9 @@ export default function AnnotatePage() {
                                 <Button variant="outline" onClick={() => setSettingsOpen(true)}>
                                     <Settings2 className="mr-2" /> Labeling Setup
                                 </Button>
+                                <Button variant="outline" onClick={() => setManageProjectsOpen(true)}>
+                                    <Layers className="mr-2" /> Projects
+                                </Button>
                                 <Button variant="outline" onClick={() => setAccessSettingsOpen(true)}>
                                     <Users className="mr-2" /> Access Settings
                                 </Button>
@@ -589,6 +616,7 @@ export default function AnnotatePage() {
             {replaceDialog}
             {settingsDialog}
             {accessSettingsDialog}
+            {manageProjectsDialog}
             {exportDialog}
             {reviewSettingsDialog}
             <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b">
@@ -627,6 +655,11 @@ export default function AnnotatePage() {
                         {isAdmin && (
                             <Button onClick={() => setExportOpen(true)}>
                                 <FileDown className="mr-2" /> Export
+                            </Button>
+                        )}
+                        {isAdmin && (
+                            <Button variant="outline" onClick={() => setManageProjectsOpen(true)}>
+                                <Layers className="mr-2" /> Projects
                             </Button>
                         )}
                         {isAdmin && (

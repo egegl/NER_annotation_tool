@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { HttpError, requireAdmin } from '@/lib/server/auth';
-import { gatherExport, getProject } from '@/lib/server/repo';
+import { gatherExport, getProjectById } from '@/lib/server/repo';
 import {
   multiUserCasesToCsv,
   multiUserCasesToTasks,
@@ -27,20 +27,25 @@ const handle = (error: unknown) => {
 export async function POST(request: Request) {
   try {
     await requireAdmin();
-    const project = getProject();
-    if (!project) {
-      return NextResponse.json({ error: 'No project to export yet.' }, { status: 400 });
-    }
 
     const body = (await request.json()) as {
+      projectId?: number;
       userIds?: number[];
       format?: 'json' | 'csv';
       includeGroundTruth?: boolean;
     };
+    if (!Number.isInteger(body.projectId)) {
+      return NextResponse.json({ error: 'A valid projectId is required.' }, { status: 400 });
+    }
+    const project = getProjectById(body.projectId as number);
+    if (!project) {
+      return NextResponse.json({ error: 'That project no longer exists.' }, { status: 404 });
+    }
+
     const userIds = Array.isArray(body.userIds) ? body.userIds : [];
     const format = body.format === 'csv' ? 'csv' : 'json';
 
-    const cases: MultiUserCase[] = gatherExport(userIds, body.includeGroundTruth === true).map((row) => ({
+    const cases: MultiUserCase[] = gatherExport(project.id, userIds, body.includeGroundTruth === true).map((row) => ({
       ID: row.task.external_id,
       data: JSON.parse(row.task.data_json) as Record<string, string>,
       byUser: row.byUser,

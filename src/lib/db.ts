@@ -28,6 +28,19 @@ const initSchema = (database: Database.Database) => {
   database.pragma('busy_timeout = 15000');
 
   database.exec(`
+    -- A project is one uploaded data file + its labeling config. There can be
+    -- several at once; each account (users.project_id) is assigned to one, so
+    -- different annotators can work on different files simultaneously.
+    CREATE TABLE IF NOT EXISTS project (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      file_name    TEXT NOT NULL,
+      config_xml   TEXT NOT NULL,
+      keywords     TEXT NOT NULL DEFAULT '',
+      review_blind INTEGER NOT NULL DEFAULT 1,
+      created_at   TEXT NOT NULL,
+      created_by   TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS users (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
       email         TEXT NOT NULL UNIQUE,
@@ -35,17 +48,9 @@ const initSchema = (database: Database.Database) => {
       salt          TEXT NOT NULL,
       iterations    INTEGER NOT NULL,
       password_hash TEXT NOT NULL,
-      created_at    TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS project (
-      id           INTEGER PRIMARY KEY CHECK (id = 1),
-      file_name    TEXT NOT NULL,
-      config_xml   TEXT NOT NULL,
-      keywords     TEXT NOT NULL DEFAULT '',
-      review_blind INTEGER NOT NULL DEFAULT 1,
-      created_at   TEXT NOT NULL,
-      created_by   TEXT
+      created_at    TEXT NOT NULL,
+      -- The project this account currently annotates (NULL = none assigned yet).
+      project_id    INTEGER REFERENCES project(id) ON DELETE SET NULL
     );
 
     CREATE TABLE IF NOT EXISTS tasks (
@@ -90,6 +95,52 @@ const initSchema = (database: Database.Database) => {
   // identities from the adjudicator). Defaults to blind.
   if (!projectCols.some((c) => c.name === 'review_blind')) {
     database.exec(`ALTER TABLE project ADD COLUMN review_blind INTEGER NOT NULL DEFAULT 1`);
+  }
+
+  // Migration: the project table used to be a hard singleton (id INTEGER PRIMARY
+  // KEY CHECK (id = 1)). Per-account project files need several project rows, so
+  // rebuild the table without the CHECK when an old definition is detected. The
+  // single existing project keeps id = 1; new projects auto-increment from there.
+  const projectSql =
+    (database
+      .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'project'`)
+      .get() as { sql?: string } | undefined)?.sql ?? '';
+  if (/CHECK/i.test(projectSql)) {
+    database.pragma('foreign_keys = OFF');
+    database.transaction(() => {
+      database.exec(`
+        CREATE TABLE project_new (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          file_name    TEXT NOT NULL,
+          config_xml   TEXT NOT NULL,
+          keywords     TEXT NOT NULL DEFAULT '',
+          review_blind INTEGER NOT NULL DEFAULT 1,
+          created_at   TEXT NOT NULL,
+          created_by   TEXT
+        );
+        INSERT INTO project_new (id, file_name, config_xml, keywords, review_blind, created_at, created_by)
+          SELECT id, file_name, config_xml, keywords, review_blind, created_at, created_by FROM project;
+        DROP TABLE project;
+        ALTER TABLE project_new RENAME TO project;
+      `);
+    })();
+    database.pragma('foreign_keys = ON');
+  }
+
+  // Migration: the per-account project assignment column. When it is first added
+  // to an existing database, keep every current account on the project already
+  // uploaded (the lone project row, id = 1), so nobody's work changes.
+  const userCols = database.prepare(`PRAGMA table_info(users)`).all() as { name: string }[];
+  if (!userCols.some((c) => c.name === 'project_id')) {
+    database.exec(
+      `ALTER TABLE users ADD COLUMN project_id INTEGER REFERENCES project(id) ON DELETE SET NULL`,
+    );
+    const existing = database
+      .prepare(`SELECT id FROM project ORDER BY id LIMIT 1`)
+      .get() as { id: number } | undefined;
+    if (existing) {
+      database.prepare(`UPDATE users SET project_id = ? WHERE project_id IS NULL`).run(existing.id);
+    }
   }
 };
 

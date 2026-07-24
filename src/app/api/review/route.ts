@@ -4,7 +4,8 @@ import { HttpError, requireAdmin } from '@/lib/server/auth';
 import {
   gatherReview,
   getAdjudications,
-  getProject,
+  getProjectById,
+  getTasksForProject,
   saveAdjudication,
   setReviewBlind,
 } from '@/lib/server/repo';
@@ -27,16 +28,20 @@ const handle = (error: unknown) => {
  * carries stable positional keys ("a1", "a2", ordered by user id) and
  * "Annotator N" labels, never emails.
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     await requireAdmin();
-    const project = getProject();
+    const projectId = Number(new URL(request.url).searchParams.get('projectId'));
+    if (!Number.isInteger(projectId)) {
+      return NextResponse.json({ error: 'A valid projectId is required.' }, { status: 400 });
+    }
+    const project = getProjectById(projectId);
     if (!project) {
-      return NextResponse.json({ error: 'No project to review yet.' }, { status: 400 });
+      return NextResponse.json({ error: 'That project no longer exists.' }, { status: 404 });
     }
     const blind = project.review_blind !== 0;
 
-    const { annotators, byTask } = gatherReview();
+    const { annotators, byTask } = gatherReview(projectId);
     const keyByUserId = new Map(annotators.map((a, i) => [a.userId, `a${i + 1}`]));
     const annotations: Record<number, Record<string, AnnotationResult[]>> = {};
     for (const [taskId, perUser] of byTask) {
@@ -47,14 +52,22 @@ export async function GET() {
       annotations[taskId] = masked;
     }
 
+    const tasks = getTasksForProject(projectId).map((t) => ({
+      id: t.id,
+      ID: t.external_id,
+      data: JSON.parse(t.data_json) as Record<string, string>,
+    }));
+
     return NextResponse.json({
       settings: { blind },
+      project: { id: project.id, fileName: project.file_name, configXml: project.config_xml },
+      tasks,
       annotators: annotators.map((a, i) => ({
         key: `a${i + 1}`,
         label: blind ? `Annotator ${i + 1}` : a.email,
       })),
       annotations,
-      adjudications: getAdjudications(),
+      adjudications: getAdjudications(projectId),
     });
   } catch (error) {
     return handle(error);
@@ -79,15 +92,18 @@ export async function PUT(request: Request) {
   }
 }
 
-/** Admin only: update the blind-adjudication setting. */
+/** Admin only: update a project's blind-adjudication setting. */
 export async function PATCH(request: Request) {
   try {
     await requireAdmin();
-    const body = (await request.json()) as { blind?: boolean };
-    if (typeof body.blind !== 'boolean') {
-      return NextResponse.json({ error: 'blind (boolean) is required.' }, { status: 400 });
+    const body = (await request.json()) as { projectId?: number; blind?: boolean };
+    if (typeof body.blind !== 'boolean' || !Number.isInteger(body.projectId)) {
+      return NextResponse.json(
+        { error: 'projectId (number) and blind (boolean) are required.' },
+        { status: 400 },
+      );
     }
-    setReviewBlind(body.blind);
+    setReviewBlind(body.projectId as number, body.blind);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return handle(error);

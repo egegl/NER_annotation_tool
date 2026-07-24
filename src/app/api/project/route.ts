@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
 import type { CaseData } from '@/types';
 import { HttpError, requireAdmin, requireUser } from '@/lib/server/auth';
-import { getProject, getTasks, replaceProject, updateConfig } from '@/lib/server/repo';
+import {
+  createProjectAndAssign,
+  getTasksForProject,
+  getUserProject,
+  getUserProjectId,
+  updateProjectConfig,
+} from '@/lib/server/repo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,20 +20,21 @@ const handle = (error: unknown) => {
   return NextResponse.json({ error: message }, { status: 400 });
 };
 
-/** Any logged-in user: the shared project — unannotated tasks + labeling config. */
+/** Any logged-in user: their assigned project — unannotated tasks + config. */
 export async function GET() {
   try {
-    await requireUser();
-    const project = getProject();
+    const user = await requireUser();
+    const project = getUserProject(user.id);
     if (!project) return NextResponse.json({ project: null });
 
-    const tasks = getTasks().map((t) => ({
+    const tasks = getTasksForProject(project.id).map((t) => ({
       id: t.id,
       ID: t.external_id,
       data: JSON.parse(t.data_json) as Record<string, string>,
     }));
     return NextResponse.json({
       project: {
+        id: project.id,
         fileName: project.file_name,
         configXml: project.config_xml,
         keywords: project.keywords ?? '',
@@ -39,7 +46,11 @@ export async function GET() {
   }
 }
 
-/** Admin only: replace the project (wipes all tasks + annotations). */
+/**
+ * Admin only: create a new project from an uploaded file and assign the chosen
+ * accounts to it. Accounts left off `assignUserIds` keep their current project,
+ * so their tasks and annotations are untouched.
+ */
 export async function POST(request: Request) {
   try {
     const admin = await requireAdmin();
@@ -48,6 +59,7 @@ export async function POST(request: Request) {
       configXml?: string;
       keywords?: string;
       cases?: CaseData[];
+      assignUserIds?: number[];
     };
     if (!body.fileName || !body.configXml || !Array.isArray(body.cases) || body.cases.length === 0) {
       return NextResponse.json(
@@ -55,24 +67,38 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    // Strip any imported annotations so every annotator starts from scratch.
+    const assignUserIds = Array.isArray(body.assignUserIds)
+      ? body.assignUserIds.filter((id): id is number => Number.isInteger(id))
+      : [];
+    // Strip any imported annotations so assigned annotators start from scratch.
     const cases = body.cases.map((c) => ({ ID: c.ID, data: c.data, results: [] }));
-    replaceProject(body.fileName, body.configXml, body.keywords ?? '', cases, admin.email);
-    return NextResponse.json({ ok: true, count: cases.length });
+    const projectId = createProjectAndAssign(
+      body.fileName,
+      body.configXml,
+      body.keywords ?? '',
+      cases,
+      admin.email,
+      assignUserIds,
+    );
+    return NextResponse.json({ ok: true, count: cases.length, projectId, assigned: assignUserIds.length });
   } catch (error) {
     return handle(error);
   }
 }
 
-/** Admin only: update the shared labeling config (keeps tasks + annotations). */
+/** Admin only: update the labeling config of the admin's own current project. */
 export async function PATCH(request: Request) {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
     const body = (await request.json()) as { configXml?: string };
     if (!body.configXml) {
       return NextResponse.json({ error: 'configXml is required.' }, { status: 400 });
     }
-    updateConfig(body.configXml);
+    const projectId = getUserProjectId(admin.id);
+    if (!projectId) {
+      return NextResponse.json({ error: 'No project to configure yet.' }, { status: 400 });
+    }
+    updateProjectConfig(projectId, body.configXml);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return handle(error);

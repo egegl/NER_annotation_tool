@@ -20,6 +20,10 @@ export interface ReviewAnnotator {
 
 export interface ReviewData {
   settings: { blind: boolean };
+  /** The project under review (its labeling config + file name). */
+  project?: { id: number; fileName: string; configXml: string };
+  /** The project's task rows, so the client can drive the review workspace. */
+  tasks?: { id: number; ID: string; data: Record<string, string> }[];
   annotators: ReviewAnnotator[];
   /** task id -> annotator key -> that annotator's results. */
   annotations: Record<number, Record<string, AnnotationResult[]>>;

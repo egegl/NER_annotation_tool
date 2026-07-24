@@ -41,6 +41,8 @@ interface UserItem {
   id: number;
   email: string;
   role: Role;
+  /** The project this account is assigned to (its file name), or null. */
+  projectFile: string | null;
 }
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -178,6 +180,7 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail }: Props
                     <TableRow>
                       <TableHead>Email</TableHead>
                       <TableHead className="w-28">Tier</TableHead>
+                      <TableHead>Project</TableHead>
                       <TableHead className="w-16 text-right">Remove</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -196,6 +199,9 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail }: Props
                             <Badge variant={u.role === 'admin' ? 'default' : 'secondary'} className="capitalize">
                               {u.role}
                             </Badge>
+                          </TableCell>
+                          <TableCell className="max-w-[12rem] truncate text-sm text-muted-foreground" title={u.projectFile ?? undefined}>
+                            {u.projectFile ?? <span className="italic">none</span>}
                           </TableCell>
                           <TableCell className="text-right">
                             <Button

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { HttpError, requireAdmin, type Role } from '@/lib/server/auth';
-import { createUser, deleteUser, listUsers } from '@/lib/server/repo';
+import { createUser, deleteUser, getUserProjectId, listUsers } from '@/lib/server/repo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,7 +28,7 @@ export async function GET() {
 /** Admin only: create a new account. */
 export async function POST(request: Request) {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
     const body = (await request.json()) as { email?: string; password?: string; role?: Role };
     if (!body.email || !body.password) {
       return NextResponse.json({ error: 'Email and password are required.' }, { status: 400 });
@@ -40,7 +40,10 @@ export async function POST(request: Request) {
       );
     }
     const role: Role = body.role === 'admin' ? 'admin' : 'annotator';
-    const user = await createUser(body.email, body.password, role);
+    // New accounts join the creating admin's current project (if any), so they
+    // pick up the work already in progress; the admin can move them later.
+    const projectId = getUserProjectId(admin.id);
+    const user = await createUser(body.email, body.password, role, projectId);
     return NextResponse.json({ user });
   } catch (error) {
     return handle(error);
