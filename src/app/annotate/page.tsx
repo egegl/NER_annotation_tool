@@ -362,7 +362,7 @@ export default function AnnotatePage() {
         setPendingImport(null);
 
         const cases = build(textColumn, idColumn);
-        if (cases.length === 0) {
+        if (cases.length === 0 || cases.every((c) => (c.data.text ?? '').length === 0)) {
             toast({
                 variant: 'destructive',
                 title: 'Import Failed',

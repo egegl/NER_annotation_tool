@@ -222,51 +222,50 @@ const resolveId = (data: Record<string, string>, idField?: string): string => {
   return (raw ?? '').trim();
 };
 
-/** Build cases from parsed CSV/XLSX rows. `textField` names the column holding
- * the text to annotate; `idField` names the column holding the record ID (see
- * `resolveId`). An `annotations` column (JSON array) is parsed back into results
- * so CSV exports round-trip. */
+/** Build one case for every parsed CSV/XLSX row. `textField` names the column
+ * holding the text to annotate; `idField` names the column holding the record ID
+ * (see `resolveId`). Rows whose selected text cell is blank are deliberately
+ * retained: silently filtering them makes the uploaded project smaller than its
+ * source file and shifts every following case number. An `annotations` column
+ * (JSON array) is parsed back into results so CSV exports round-trip. */
 export const rowsToCases = (
   rows: Record<string, unknown>[],
   textField?: string,
   idField?: string,
 ): CaseData[] =>
-  rows
-    .map((row, i) => {
-      const data = stringifyRow(row, textField);
-      let results: AnnotationResult[] = [];
-      if (data.annotations) {
-        try {
-          const parsed = JSON.parse(data.annotations);
-          if (Array.isArray(parsed)) results = parsed;
-        } catch {
-          /* leave unannotated if the column is not valid JSON */
-        }
+  rows.map((row, i) => {
+    const data = stringifyRow(row, textField);
+    let results: AnnotationResult[] = [];
+    if (data.annotations) {
+      try {
+        const parsed = JSON.parse(data.annotations);
+        if (Array.isArray(parsed)) results = parsed;
+      } catch {
+        /* leave unannotated if the column is not valid JSON */
       }
-      delete data.annotations;
-      return { ID: resolveId(data, idField) || `case-${i + 1}`, data, results };
-    })
-    .filter((c) => (c.data.text ?? '').length > 0);
+    }
+    delete data.annotations;
+    return { ID: resolveId(data, idField) || `case-${i + 1}`, data, results };
+  });
 
 /** Build cases from a Label Studio task JSON export (round-trip / re-import).
  * `textField` names the data field holding the text to annotate; `idField`
- * names the data field holding the record ID (see `resolveId`). */
+ * names the data field holding the record ID (see `resolveId`). As with tabular
+ * imports, every source task is retained even when its selected text is blank. */
 export const tasksToCases = (
   tasks: LSTask[],
   textField?: string,
   idField?: string,
 ): CaseData[] =>
-  tasks
-    .map((task, i) => {
-      const data = stringifyRow(task.data ?? {}, textField);
-      const results =
-        task.annotations?.[0]?.result ?? task.predictions?.[0]?.result ?? [];
-      const ID =
-        resolveId(data, idField) ||
-        (task.id != null ? String(task.id) : `case-${i + 1}`);
-      return { ID, data, results };
-    })
-    .filter((c) => (c.data.text ?? '').length > 0);
+  tasks.map((task, i) => {
+    const data = stringifyRow(task.data ?? {}, textField);
+    const results =
+      task.annotations?.[0]?.result ?? task.predictions?.[0]?.result ?? [];
+    const ID =
+      resolveId(data, idField) ||
+      (task.id != null ? String(task.id) : `case-${i + 1}`);
+    return { ID, data, results };
+  });
 
 /** Serialize cases to Label Studio task JSON. */
 export const casesToTasks = (cases: CaseData[]): LSTask[] =>

@@ -50,7 +50,9 @@ Supported tags: `<Text value="$field">`; `<Labels>`, `<Choices>`, `<TextArea>`,
 Imports take `.csv`/`.xlsx` or a Label Studio `.json` export. After parsing, the
 admin is asked which column holds the main text to annotate (the choice is
 mirrored into `$text`, which the config references); `text`/`raw_text` columns are
-pre-selected automatically. Exports round-trip back through import.
+pre-selected automatically. Every parsed data row becomes a case, including a
+row with a blank cell in the selected text column, so case numbers stay aligned
+with the source file. Exports round-trip back through import.
 
 ## Accounts
 
