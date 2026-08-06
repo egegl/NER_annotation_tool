@@ -26,7 +26,8 @@ The database is at `DATA_DIR/annotation.db` (default `./data/annotation.db`).
    credentials.
 4. Annotators log in and land on the shared project. They have no admin controls.
 5. They annotate; each change auto-saves, private to them.
-6. Admin exports (**Export**): pick accounts with checkboxes, then download a
+6. Admin exports (**Export**): pick accounts with checkboxes, optionally exclude
+   the patient note column, then download a
    Label Studio JSON (one `annotations` entry per user, tagged `completed_by`) or
    a CSV (one row per task and annotator).
 

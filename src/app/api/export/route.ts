@@ -22,7 +22,8 @@ const handle = (error: unknown) => {
  * Admin only: export the selected users' annotations. `userIds` chooses which
  * annotators are included; `format` is 'json' (combined Label Studio) or 'csv';
  * `includeGroundTruth` adds each task's adjudicated results as a
- * "ground_truth" annotator entry.
+ * "ground_truth" annotator entry; `includePatientNote=false` removes the note
+ * field (including a mirrored copy under its original source-column name).
  */
 export async function POST(request: Request) {
   try {
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
       userIds?: number[];
       format?: 'json' | 'csv';
       includeGroundTruth?: boolean;
+      includePatientNote?: boolean;
     };
     if (!Number.isInteger(body.projectId)) {
       return NextResponse.json({ error: 'A valid projectId is required.' }, { status: 400 });
@@ -44,6 +46,7 @@ export async function POST(request: Request) {
 
     const userIds = Array.isArray(body.userIds) ? body.userIds : [];
     const format = body.format === 'csv' ? 'csv' : 'json';
+    const includePatientNote = body.includePatientNote !== false;
 
     const cases: MultiUserCase[] = gatherExport(project.id, userIds, body.includeGroundTruth === true).map((row) => ({
       ID: row.task.external_id,
@@ -53,7 +56,7 @@ export async function POST(request: Request) {
 
     const base = project.file_name.replace(/\.(csv|xlsx|xls|json)$/, '') || 'annotations';
     if (format === 'csv') {
-      return new NextResponse(multiUserCasesToCsv(cases), {
+      return new NextResponse(multiUserCasesToCsv(cases, includePatientNote), {
         headers: {
           'Content-Type': 'text/csv;charset=utf-8',
           'Content-Disposition': `attachment; filename="annotated_${base}.csv"`,
@@ -61,7 +64,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const json = JSON.stringify(multiUserCasesToTasks(cases), null, 2);
+    const json = JSON.stringify(multiUserCasesToTasks(cases, includePatientNote), null, 2);
     return new NextResponse(json, {
       headers: {
         'Content-Type': 'application/json',

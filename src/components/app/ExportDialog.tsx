@@ -50,6 +50,7 @@ export function ExportDialog({ open, onOpenChange, defaultProjectId }: Props) {
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [projectId, setProjectId] = useState<number | null>(defaultProjectId);
   const [includeGroundTruth, setIncludeGroundTruth] = useState(false);
+  const [includePatientNote, setIncludePatientNote] = useState(true);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -64,6 +65,7 @@ export function ExportDialog({ open, onOpenChange, defaultProjectId }: Props) {
         const list: UserListItem[] = userData.users ?? [];
         setUsers(list);
         setSelected(new Set(list.map((u) => u.id))); // default: everyone included
+        setIncludePatientNote(true);
         const projectList: ProjectListItem[] = projectData.projects ?? [];
         setProjects(projectList);
         const fallback = projectData.currentProjectId ?? projectList[0]?.id ?? null;
@@ -92,7 +94,13 @@ export function ExportDialog({ open, onOpenChange, defaultProjectId }: Props) {
       const response = await fetch(api('/api/export'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, userIds: Array.from(selected), format, includeGroundTruth }),
+        body: JSON.stringify({
+          projectId,
+          userIds: Array.from(selected),
+          format,
+          includeGroundTruth,
+          includePatientNote,
+        }),
       });
       if (!response.ok) {
         const result = await response.json().catch(() => ({}));
@@ -199,6 +207,20 @@ export function ExportDialog({ open, onOpenChange, defaultProjectId }: Props) {
             <Label htmlFor="export-ground-truth" className="flex-1 cursor-pointer font-normal">
               Include adjudicated ground truth
               <span className="ml-2 text-xs text-muted-foreground">(as “ground_truth”)</span>
+            </Label>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="export-patient-note"
+              checked={includePatientNote}
+              onCheckedChange={(v) => setIncludePatientNote(v === true)}
+            />
+            <Label htmlFor="export-patient-note" className="flex-1 cursor-pointer font-normal">
+              Include patient note column
+              <span className="ml-2 text-xs text-muted-foreground">
+                (uncheck for a note-free export)
+              </span>
             </Label>
           </div>
         </div>

@@ -23,6 +23,34 @@ const withoutInternal = (
     Object.entries(data).filter(([k]) => !k.startsWith('__')),
   );
 
+/** Remove the patient-note field from an export while preserving the remaining
+ * task metadata. Imports mirror the selected source column into `text`, so the
+ * same note may also be present under its original header (for example,
+ * `Patient Note`) or in `raw_text` when inline keyword markers were used. Drop
+ * every copy whose normalized/marker-cleaned content matches the canonical
+ * `text` value rather than relying on a particular source-column name. */
+const withoutPatientNote = (
+  data: Record<string, string>,
+): Record<string, string> => {
+  const clean = withoutInternal(data);
+  const patientNote = clean.text;
+  if (patientNote === undefined) return clean;
+
+  return Object.fromEntries(
+    Object.entries(clean).filter(([key, value]) => {
+      if (key === 'text' || key === 'raw_text') return false;
+      if (value === patientNote) return false;
+      return extractWrappedKeywords(value).cleanedText !== patientNote;
+    }),
+  );
+};
+
+const exportData = (
+  data: Record<string, string>,
+  includePatientNote: boolean,
+): Record<string, string> =>
+  includePatientNote ? withoutInternal(data) : withoutPatientNote(data);
+
 /**
  * Compute keyword-highlight spans for a note's (already cleaned) text:
  * the exact positions of any `####`-wrapped keywords, or — when the note had no
@@ -270,9 +298,12 @@ export const casesToCsv = (cases: CaseData[]): string => {
  * one `annotations` entry per selected user, tagged with `completed_by` (email),
  * matching how Label Studio represents multiple annotators per task.
  */
-export const multiUserCasesToTasks = (cases: MultiUserCase[]): LSTask[] =>
+export const multiUserCasesToTasks = (
+  cases: MultiUserCase[],
+  includePatientNote = true,
+): LSTask[] =>
   cases.map((c) => ({
-    data: { ID: c.ID, ...withoutInternal(c.data) },
+    data: { ID: c.ID, ...exportData(c.data, includePatientNote) },
     annotations: c.byUser.map((u) => ({ completed_by: u.email, result: u.results })),
   }));
 
@@ -281,9 +312,12 @@ export const multiUserCasesToTasks = (cases: MultiUserCase[]): LSTask[] =>
  * `annotator` column plus the per-user `annotations` JSON column. Round-trippable
  * through the CSV reader (rowsToCases). Tasks with no annotations are omitted.
  */
-export const multiUserCasesToCsv = (cases: MultiUserCase[]): string => {
+export const multiUserCasesToCsv = (
+  cases: MultiUserCase[],
+  includePatientNote = true,
+): string => {
   const rows = cases.flatMap((c) => {
-    const { ID: _ignored, ...rest } = withoutInternal(c.data);
+    const { ID: _ignored, ...rest } = exportData(c.data, includePatientNote);
     return c.byUser.map((u) => ({
       ID: c.ID,
       ...rest,
