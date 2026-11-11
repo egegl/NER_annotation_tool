@@ -20,7 +20,7 @@ const handle = (error: unknown) => {
   return NextResponse.json({ error: message }, { status: 400 });
 };
 
-/** Any logged-in user: their assigned project — unannotated tasks + config. */
+/** Any logged-in user: their assigned project (unannotated tasks + config). */
 export async function GET() {
   try {
     const user = await requireUser();

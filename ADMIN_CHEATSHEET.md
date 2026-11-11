@@ -1,16 +1,16 @@
-# BMI Annotation Tool — Admin Cheat Sheet
+# BMI Annotation Tool: Admin Cheat Sheet
 
 Login by email; admins create every account. All data sits in `/labs/bozkurtlab/annotation-tool/data/annotation.db`.
 
 ## Order of operations
 
 1. Sign in
-2. **Access Settings** — create annotator accounts
-3. **Labeling Setup** — define labels and questions
-4. **Upload Project** — file + text column
-5. **Assign dialog** — tick who works on it
-6. **Reviewer Mode** — adjudicate conflicts
-7. **Export** — download
+2. **Access Settings**: create annotator accounts
+3. **Labeling Setup**: define labels and questions
+4. **Upload Project**: file + text column
+5. **Assign dialog**: tick who works on it
+6. **Reviewer Mode**: adjudicate conflicts
+7. **Export**: download
 
 Accounts and config must exist before the upload.
 
@@ -33,7 +33,7 @@ Accounts and config must exist before the upload.
 
 - Select text → label picker, or click a label first, then select.
 - Regions card: click a span to select, trash to delete, link icon for relations.
-- Autosaves — there is no Save button.
+- Autosaves. There is no Save button.
 - Ctrl/Cmd-F search · T reading size · pen keyword list.
 - `Annotated x / N` counts only cases where every `required` control is answered.
 
@@ -49,4 +49,4 @@ Accounts and config must exist before the upload.
 Pick project → tick annotators → optional ground truth → `annotated_<file>.json` / `.csv`.
 
 - **JSON**: one object per case, `data` + `annotations[]` tagged `completed_by`; 1:1 with Label Studio.
-- **CSV**: one row per case per annotator — `ID, text, annotator, <your columns>, annotations`.
+- **CSV**: one row per case per annotator: `ID, text, annotator, <your columns>, annotations`.

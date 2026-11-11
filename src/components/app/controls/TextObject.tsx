@@ -33,8 +33,8 @@ const DEFAULT_PREFS: ReadingPrefs = { fontSize: 14, lineHeight: 1.5, maxWidth: n
 
 /** Render a literal slice of the note text, inserting a visual line break after
  * any run of 3+ consecutive spaces (clinical exports often use runs of spaces
- * where a line break was lost). The space characters are kept in the DOM — only
- * a <br>, which contributes no characters to Range.toString(), is added — so
+ * where a line break was lost). The space characters are kept in the DOM (only
+ * a <br>, which contributes no characters to Range.toString(), is added), so
  * annotation offsets and the exported text are unaffected. */
 export function withLineBreaks(str: string, keyBase: string): React.ReactNode[] {
   if (!str.includes('   ')) return [str];
@@ -128,7 +128,7 @@ export function TextObject({ object }: { object: ObjectTag }) {
   );
   // Keyword spans baked in at import time (from `####keyword####` markers or the
   // exact/fuzzy match columns). Stored as character offsets into this exact
-  // text, so they're used verbatim — only dropped if out of bounds or covering
+  // text, so they're used verbatim, only dropped if out of bounds or covering
   // an already-labelled region.
   const markerSpans = useMemo<Interval[]>(() => {
     if (previewMode) return [];

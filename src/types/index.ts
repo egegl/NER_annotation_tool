@@ -56,9 +56,9 @@ export const isRegion = (r: AnnotationResult): r is RegionResult =>
 /** CSS color values (inline styles) so both the preset palette and custom
  * `background="#hex"` colors render uniformly. */
 export interface LabelColor {
-  /** Solid color — borders and indicator dots. */
+  /** Solid color for borders and indicator dots. */
   solid: string;
-  /** Translucent fill — span/badge background. */
+  /** Translucent fill for the span/badge background. */
   bg: string;
   /** Readable text color over the fill. */
   text: string;

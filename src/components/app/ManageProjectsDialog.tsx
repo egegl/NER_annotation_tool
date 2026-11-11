@@ -52,7 +52,7 @@ interface Props {
 /**
  * Admin-only project management. Lists every uploaded project and lets the admin
  * delete unused ones (no accounts assigned). A project with assignees must have
- * them reassigned first (Replace Project) — its trash button is disabled.
+ * them reassigned first (Replace Project); its trash button is disabled.
  */
 export function ManageProjectsDialog({ open, onOpenChange, currentProjectId, onDeleted }: Props) {
   const { toast } = useToast();

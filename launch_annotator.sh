@@ -11,7 +11,7 @@
 # The rebuild is skipped when the current commit is already built and the
 # working tree is clean, so re-launching without a new pull is near-instant.
 #
-# IMPORTANT — run ONE shared server, not one per person.
+# IMPORTANT: run ONE shared server, not one per person.
 #   The SQLite database in DATA_DIR must only ever be opened by a single server
 #   process. SQLite's file locking is unreliable across hosts on a network
 #   filesystem, so several people each launching their own server against the
@@ -79,7 +79,7 @@ fi
 # ---- 5. Build (skip when the current commit is already built) --------------
 # We stamp each successful build with the git commit it was built from
 # (.next/.built-commit). On the next launch we rebuild only when that stamp is
-# missing/stale or the working tree has uncommitted changes — so re-running the
+# missing/stale or the working tree has uncommitted changes, so re-running the
 # launcher without a fresh `git pull` is near-instant, while a pull (new HEAD)
 # or local edits still force a rebuild and never serve stale code.
 STAMP_FILE="$PROJECT_DIR/.next/.built-commit"
@@ -133,7 +133,7 @@ cat <<EOF
 
   This is the SHARED server. Run only one of these against
   the shared database. Share this URL with the other
-  annotators (they open it in their own browser — they do
+  annotators (they open it in their own browser; they do
   NOT run this script):
 
       http://${HOSTNAME_FQDN}:${PORT}

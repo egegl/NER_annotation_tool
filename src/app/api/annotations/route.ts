@@ -35,7 +35,7 @@ export async function PUT(request: Request) {
         { status: 400 },
       );
     }
-    // user.id comes from the session — a client cannot write to another user's row.
+    // user.id comes from the session, so a client cannot write to another user's row.
     saveUserAnnotation(body.taskId, user.id, body.results);
     return NextResponse.json({ ok: true });
   } catch (error) {

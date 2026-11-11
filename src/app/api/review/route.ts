@@ -22,7 +22,7 @@ const handle = (error: unknown) => {
 };
 
 /**
- * Admin only: everything the review stream needs — every annotator's results per
+ * Admin only: everything the review stream needs: every annotator's results per
  * task, the adjudicated ground truth, and the review settings. With blind
  * adjudication on, annotator identities are masked SERVER-SIDE: the payload
  * carries stable positional keys ("a1", "a2", ordered by user id) and

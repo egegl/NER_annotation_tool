@@ -132,7 +132,7 @@ export const KEYWORD_SPANS_KEY = '__keywordSpans';
 const MAX_WRAPPED_KEYWORD_LEN = 40;
 
 /**
- * A keyword wrapped in hash markers — `####cannabis####`, `#####CBD#####`, or a
+ * A keyword wrapped in hash markers: `####cannabis####`, `#####CBD#####`, or a
  * phrase `####medical marijuana####`. Markers are runs of FOUR OR MORE `#`
  * (some snippets wrap a word in more than four), and the whole run is consumed
  * so no stray hashes are left behind. The captured keyword excludes `#` and

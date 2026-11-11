@@ -184,7 +184,7 @@ export default function AnnotatePage() {
         saveTimer.current = setTimeout(() => saveAnnotation(taskId, results), 500);
     };
 
-    /** Admin: load one project's review stream — its config + tasks plus every
+    /** Admin: load one project's review stream: its config + tasks plus every
      * annotator's results + adjudications (identities masked server-side when
      * blind adjudication is on). Switches the workspace to that project. */
     const loadReviewProject = useCallback(async (projectId: number): Promise<ReviewData> => {

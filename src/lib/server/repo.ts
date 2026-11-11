@@ -122,7 +122,7 @@ export const createProjectAndAssign = (
 };
 
 /**
- * Delete a project and everything under it — its tasks, and their annotations
+ * Delete a project and everything under it: its tasks, and their annotations
  * and adjudications (all via ON DELETE CASCADE). Only allowed when no account is
  * assigned to it, so an actively-used project can't be wiped by accident;
  * reassign its accounts (Replace Project) first.

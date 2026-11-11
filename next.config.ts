@@ -10,7 +10,7 @@ const basePath = (process.env.BASE_PATH || '').replace(/\/+$/, '');
 const nextConfig: NextConfig = {
   // Runs as a Node server (`next start`) so the app can persist a shared project
   // and per-user annotations in SQLite. NOTE: do NOT add `output: 'export'` (as
-  // the upstream static tool does) — it would drop all the server/API/SQLite
+  // the upstream static tool does), because it would drop all the server/API/SQLite
   // functionality this fork depends on.
   basePath: basePath || undefined,
   // assetPrefix mirrors basePath (with trailing slash) to match the upstream

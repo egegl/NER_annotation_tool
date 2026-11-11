@@ -8,7 +8,7 @@ import {
 } from '@/lib/highlight';
 
 /** Columns to mine for matched keywords when a note has no inline `####`
- * markers — Yuhe's "exact"/"fuzzy" match columns, and the like. */
+ * markers: Yuhe's "exact"/"fuzzy" match columns, and the like. */
 const MATCH_COLUMN_RE = /exact|fuzzy|matched|keyword/i;
 /** Split a match-column cell into individual terms (comma / semicolon / pipe /
  * tab / newline separated). */
@@ -53,8 +53,8 @@ const exportData = (
 
 /**
  * Compute keyword-highlight spans for a note's (already cleaned) text:
- * the exact positions of any `####`-wrapped keywords, or — when the note had no
- * markers — every occurrence of the words listed in its exact/fuzzy match
+ * the exact positions of any `####`-wrapped keywords, or, when the note had no
+ * markers, every occurrence of the words listed in its exact/fuzzy match
  * columns. Returns a JSON string for `data[KEYWORD_SPANS_KEY]`, or '' if none.
  */
 const keywordSpansFor = (
@@ -123,7 +123,7 @@ const stringifyRow = (
 
   // Auto-highlight: if the text wraps matched keywords in `####keyword####`,
   // record each keyword's span so the renderer underlines it at its exact
-  // position — no separate keyword file needed. `data.text` is the cleaned copy
+  // position; no separate keyword file needed. `data.text` is the cleaned copy
   // the UI shows and that annotation offsets index; the original ####-marked
   // text is left UNTOUCHED in the source column so exports keep the markers
   // verbatim. (When the text column literally *is* `text` there's no separate
@@ -143,7 +143,7 @@ const stringifyRow = (
 };
 
 /** Distinct column keys present across rows, in first-seen order. The
- * `annotations` round-trip column is excluded — it is not annotatable text — as
+ * `annotations` round-trip column is excluded (it is not annotatable text), as
  * are blank/whitespace-only headers (e.g. an unnamed trailing CSV column), which
  * aren't selectable as text or ID and break value-keyed pickers. */
 export const columnsOf = (rows: Record<string, unknown>[]): string[] => {
@@ -185,7 +185,7 @@ const headerTokens = (name: string): string[] =>
     .filter(Boolean);
 
 /** Suggest which column holds the record ID. Scans columns left-to-right and
- * returns the first whose name contains "id" as a whole word — so `ID`, `id`,
+ * returns the first whose name contains "id" as a whole word, so `ID`, `id`,
  * `note_id`, `Note ID`, `patient_id`, `noteID`, and `RecordID` all match, while
  * `width`, `valid`, `candidate`, `idx`, and `guid` do not. Returns undefined
  * when nothing looks like an ID, so callers can fall back to auto-numbering. */

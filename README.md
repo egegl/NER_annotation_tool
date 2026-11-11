@@ -92,7 +92,7 @@ process (`next start`). It cannot be served as static files.
 ### Behind a reverse proxy at a subpath
 
 When the proxy serves the app under a path prefix (e.g.
-`https://example.org/myapp/`), set `BASE_PATH` **at build time** — it's baked
+`https://example.org/myapp/`), set `BASE_PATH` **at build time**. It's baked
 into the build (both Next's `basePath` and the client-side
 `NEXT_PUBLIC_BASE_PATH` used to prefix `fetch()` calls), and is also read at
 runtime to scope the session cookie to that path:

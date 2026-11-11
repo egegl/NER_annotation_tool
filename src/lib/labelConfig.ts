@@ -117,7 +117,7 @@ export const parseLabelConfig = (xml: string): ParsedConfig => {
   };
 
   if (typeof DOMParser === 'undefined') {
-    // Server / build context — defer real parsing to the client.
+    // Server / build context: defer real parsing to the client.
     return { ...empty, errors: ['XML parsing is only available in the browser.'] };
   }
 
@@ -202,7 +202,7 @@ export const labelsControlsFor = (config: ParsedConfig, objectName: string): Con
   config.controls.filter((c) => c.type === 'Labels' && c.toName === objectName);
 
 /**
- * The <Header> node that titles an object's NER section — the header that is the
+ * The <Header> node that titles an object's NER section, i.e. the header that is the
  * immediate previous sibling of the first <Labels toName="objectName">. Returned
  * (by node identity) so the NER section header can be rendered together with the
  * label bank inside the text box and skipped at its original XML position.

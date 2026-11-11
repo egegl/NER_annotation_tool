@@ -46,9 +46,6 @@ firestore-debug.log
 # SQLite database (runtime data)
 /data/
 
-# Claude Code local tooling
-/.claude/
-
 # build artifacts
 *.zip
 

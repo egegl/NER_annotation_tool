@@ -40,7 +40,7 @@ interface Props {
  * Account picker shown when an admin uploads / replaces a project. Every account
  * is listed with the project it is currently on; the admin ticks which accounts
  * move to the newly uploaded file. Unticked accounts stay on their current
- * project — their tasks and annotations are left untouched.
+ * project; their tasks and annotations are left untouched.
  */
 export function ReplaceProjectDialog({
   open,

@@ -1,7 +1,7 @@
 # Demo data
 
 Sample files for trying out the BMI Annotation Tool end to end. All data here is
-**synthetic and de-identified** — fictional patients, providers, clinics, and
+**synthetic and de-identified**: fictional patients, providers, clinics, and
 cities. Nothing is real PHI.
 
 ## Files
@@ -23,7 +23,7 @@ Location) as well as any cannabis-focused setup you configure.
 
 ### `cannabis_terms.txt`
 
-One keyword per line (the format the keyword-file picker expects — every
+One keyword per line (the format the keyword-file picker expects: every
 non-blank line is treated as a term; no comments). 46 cannabis-related terms
 spanning plant/common names, clinical phrases, abbreviations (MMJ, THC, CBD),
 cannabinoid chemistry, prescription cannabinoids (dronabinol, nabilone,
@@ -31,7 +31,7 @@ nabiximols), brand names (Marinol, Cesamet, Epidiolex, Sativex), and product /
 route forms. Matching is case-insensitive, and longer phrases win over shorter
 ones (so "medical marijuana" highlights as one span, not two).
 
-The terms were chosen to avoid false positives in clinical prose — e.g. ambiguous
+The terms were chosen to avoid false positives in clinical prose, e.g. ambiguous
 slang like "joint", "pot", or "blunt" is intentionally excluded so "joint pain"
 or "potassium" isn't highlighted. Each note mentions only one or two cannabis
 terms, the way a real pain-management note reads, so the list works as a broad

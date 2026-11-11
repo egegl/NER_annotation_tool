@@ -23,7 +23,7 @@ import { Upload, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { parseTerms } from '@/lib/highlight';
 
-/** Sentinel for "no ID column — auto-number each row" in the ID <Select>.
+/** Sentinel for "no ID column, auto-number each row" in the ID <Select>.
  * Radix Select disallows empty-string item values, so we map it to '' on use. */
 const NO_ID = '__none__';
 

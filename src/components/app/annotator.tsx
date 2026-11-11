@@ -106,7 +106,7 @@ export function Annotator({ caseData, config, onChange, adminKeywords = '', prev
       }
       case 'Labels':
         // The NER label bank renders inside its target <Text> (TextObject),
-        // between the search toolbar and the note text — not at its XML position.
+        // between the search toolbar and the note text, not at its XML position.
         return null;
       case 'Choices': {
         const c = controlByName(node.attrs.name);
