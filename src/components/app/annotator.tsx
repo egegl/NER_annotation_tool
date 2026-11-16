@@ -403,9 +403,9 @@ function AnnotatorBody({ nav }: { nav?: AnnotatorNav }) {
       >
         {(q.header || c.required) && (
           <div className="min-w-[11rem] flex-1">
-            <h3 className="flex flex-wrap items-center gap-x-2 text-sm font-semibold text-foreground">
+            <h3 className="flex flex-wrap items-center gap-x-1.5 text-sm font-semibold text-foreground">
               {q.header?.attrs.value}
-              <RequiredMark control={c} />
+              <RequiredMark control={c} compact />
             </h3>
             {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
           </div>
