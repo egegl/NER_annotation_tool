@@ -81,6 +81,9 @@ export interface ObjectTag {
   name: string;
   /** Raw value attribute: a "$field" reference or a literal string. */
   value: string;
+  /** `dialogue="true"`: lines that open with "Name:" are turns, and each
+   * speaker's name is set off in its own colour. */
+  dialogue?: boolean;
 }
 
 export type ControlType =

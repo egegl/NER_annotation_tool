@@ -58,6 +58,8 @@ A config with three or more document-level questions (`<Choices>`, `<Rating>` or
   With several `<Text>` tags, the one the questions point to (`toName`) is shown
   in full and the others share the remaining height. A top-level `<View>` that
   holds both a text and a question keeps the config stacked.
+- `<Text dialogue="true">` marks a conversation: each line that opens with
+  `Name:` is a turn, with a gap above it and the name in that speaker's colour.
 - Each question is one row. The `<Header>` right before a control is its title,
   and an optional `hint="..."` on that header is shown under the title in small
   print. "Hide hints" folds the hints away except on the active question.

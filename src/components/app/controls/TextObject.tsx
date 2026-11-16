@@ -55,6 +55,14 @@ export function withLineBreaks(str: string, keyBase: string): React.ReactNode[] 
   return nodes;
 }
 
+/** One colour per speaker of a dialogue text, in order of first appearance. */
+const SPEAKER_COLORS = [
+  'text-sky-700 dark:text-sky-300',
+  'text-emerald-700 dark:text-emerald-300',
+  'text-amber-700 dark:text-amber-300',
+  'text-violet-700 dark:text-violet-300',
+];
+
 /** How a text sizes itself in the pinned text column of question mode (wide
  * screens only): 'primary' is the text the questions are about and shows in
  * full up to a cap; 'fill' takes the height that is left and scrolls inside it. */
@@ -283,6 +291,25 @@ export function TextObject({ object, pane }: { object: ObjectTag; pane?: TextPan
     setSelectedRegionId(selectedRegionId === region.id ? null : region.id);
   };
 
+  // Dialogue texts: the "Name:" that opens a line, with that speaker's colour.
+  // Only the styling changes, so offsets into the text stay what they were.
+  const speakerMarks = useMemo(() => {
+    if (!object.dialogue) return [];
+    const order: string[] = [];
+    const out: (Interval & { color: string })[] = [];
+    const re = /^[ \t]*([A-Za-z][\w .'-]{0,30}):/gm;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      if (!order.includes(m[1])) order.push(m[1]);
+      out.push({
+        start: m.index,
+        end: m.index + m[0].length,
+        color: SPEAKER_COLORS[order.indexOf(m[1]) % SPEAKER_COLORS.length],
+      });
+    }
+    return out;
+  }, [object.dialogue, text]);
+
   /** Render plain (unlabelled) text [from, to), overlaying search + keyword marks. */
   const renderPlain = (from: number, to: number): React.ReactNode[] => {
     const inRange = (iv: Interval) => iv.start >= from && iv.end <= to;
@@ -294,7 +321,11 @@ export function TextObject({ object, pane }: { object: ObjectTag; pane?: TextPan
       // Search highlights win over keyword/marker highlights where they overlap.
       .filter((k) => !searchMatches.some((s) => k.start < s.end && k.end > s.start))
       .map((k) => ({ ...k, idx: -1, kind: 'keyword' as const }));
-    const marks = [...sMarks, ...kMarks].sort((a, b) => a.start - b.start);
+    const pMarks = speakerMarks
+      .filter(inRange)
+      .filter((p) => ![...sMarks, ...kMarks].some((o) => p.start < o.end && p.end > o.start))
+      .map((p) => ({ ...p, idx: -1, kind: 'speaker' as const }));
+    const marks = [...sMarks, ...kMarks, ...pMarks].sort((a, b) => a.start - b.start);
 
     const nodes: React.ReactNode[] = [];
     let cur = from;
@@ -314,6 +345,16 @@ export function TextObject({ object, pane }: { object: ObjectTag; pane?: TextPan
           >
             {withLineBreaks(content, `s-${mk.start}`)}
           </mark>,
+        );
+      } else if (mk.kind === 'speaker') {
+        // inline-block so the gap above a new turn can be a margin.
+        nodes.push(
+          <span
+            key={`t-${mk.start}`}
+            className={cn('inline-block font-semibold', mk.color, mk.start > 0 && 'mt-2')}
+          >
+            {content}
+          </span>,
         );
       } else {
         nodes.push(

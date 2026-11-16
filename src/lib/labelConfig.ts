@@ -144,7 +144,12 @@ export const parseLabelConfig = (xml: string): ParsedConfig => {
 
   const walk = (node: ConfigNode) => {
     if (OBJECT_TAGS.has(node.tag)) {
-      objects.push({ tag: 'Text', name: node.attrs.name ?? '', value: node.attrs.value ?? '' });
+      objects.push({
+        tag: 'Text',
+        name: node.attrs.name ?? '',
+        value: node.attrs.value ?? '',
+        dialogue: node.attrs.dialogue === 'true',
+      });
     } else if (CONTROL_TAGS.has(node.tag)) {
       const control = buildControl(node, colorAt);
       if (control) controls.push(control);
