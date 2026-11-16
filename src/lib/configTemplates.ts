@@ -21,6 +21,31 @@ export const TEMPLATES: ConfigTemplate[] = [
 </View>`,
   },
   {
+    id: 'questions',
+    name: 'Document Questions',
+    description: 'Several questions about one text, answered beside it with the keyboard.',
+    xml: `<View>
+  <Header value="Note" />
+  <Text name="text" value="$text" />
+  <Header value="Mentions pain" hint="Yes if the note reports current pain." />
+  <Choices name="pain" toName="text" choice="single" required="true">
+    <Choice value="Yes" hotkey="y" />
+    <Choice value="No" hotkey="n" />
+  </Choices>
+  <Header value="Mentions medication" hint="Yes if any drug is named." />
+  <Choices name="medication" toName="text" choice="single" required="true">
+    <Choice value="Yes" hotkey="y" />
+    <Choice value="No" hotkey="n" />
+  </Choices>
+  <Header value="Follow-up planned" hint="Yes if a next visit or call is stated." />
+  <Choices name="follow_up" toName="text" choice="single" required="true">
+    <Choice value="Yes" hotkey="y" />
+    <Choice value="No" hotkey="n" />
+  </Choices>
+  <TextArea name="notes" toName="text" rows="2" placeholder="Notes (optional)" />
+</View>`,
+  },
+  {
     id: 'ner',
     name: 'Named Entity Recognition',
     description: 'Highlight spans and tag them with entity types.',

@@ -8,9 +8,11 @@ interface Props {
   control: ControlTag;
   /** When set, this control is rendered per-region for the given region id. */
   regionId?: string;
+  /** Show the key that picks each choice (its hotkey, or its position). */
+  keyHints?: boolean;
 }
 
-export function ChoicesControl({ control, regionId }: Props) {
+export function ChoicesControl({ control, regionId, keyHints = false }: Props) {
   const { getDocResult, setDocResult, getPerRegionResult, setPerRegionResult } = useAnnotator();
 
   const current = regionId
@@ -33,7 +35,7 @@ export function ChoicesControl({ control, regionId }: Props) {
 
   return (
     <div className="flex flex-wrap gap-2">
-      {control.options.map((opt) => {
+      {control.options.map((opt, index) => {
         const selected = current.includes(opt.value);
         return (
           <button
@@ -54,6 +56,9 @@ export function ChoicesControl({ control, regionId }: Props) {
             }
           >
             {opt.value}
+            {keyHints && (opt.hotkey || index < 9) && (
+              <kbd className="ml-1.5 font-sans text-[0.7rem] opacity-60">{opt.hotkey ?? index + 1}</kbd>
+            )}
           </button>
         );
       })}

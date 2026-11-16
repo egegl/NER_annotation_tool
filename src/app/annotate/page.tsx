@@ -71,8 +71,10 @@ export default function AnnotatePage() {
     const [conflictsOnly, setConflictsOnly] = useState(true);
     const [showSaved, setShowSaved] = useState(false);
     const savedTimer = useRef<ReturnType<typeof setTimeout>>();
-    const saveTimer = useRef<ReturnType<typeof setTimeout>>();
-    const gtSaveTimer = useRef<ReturnType<typeof setTimeout>>();
+    // Debounced saves, one timer per task: moving to the next case must not
+    // cancel a save that is still waiting for the case just left.
+    const saveTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+    const gtSaveTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
     const { toast } = useToast();
     const dataFileInputRef = useRef<HTMLInputElement>(null);
     const [user, setUser] = useState<string | null>(null);
@@ -152,8 +154,8 @@ export default function AnnotatePage() {
 
     useEffect(() => () => {
         clearTimeout(savedTimer.current);
-        clearTimeout(saveTimer.current);
-        clearTimeout(gtSaveTimer.current);
+        saveTimers.current.forEach((t) => clearTimeout(t));
+        gtSaveTimers.current.forEach((t) => clearTimeout(t));
     }, []);
 
     const flashSaved = () => {
@@ -180,8 +182,11 @@ export default function AnnotatePage() {
         setData((prev) => prev.map((c, i) => (i === currentIndex ? { ...c, results } : c)));
         const taskId = taskIds[currentIndex];
         if (taskId == null) return;
-        clearTimeout(saveTimer.current);
-        saveTimer.current = setTimeout(() => saveAnnotation(taskId, results), 500);
+        clearTimeout(saveTimers.current.get(taskId));
+        saveTimers.current.set(taskId, setTimeout(() => {
+            saveTimers.current.delete(taskId);
+            saveAnnotation(taskId, results);
+        }, 500));
     };
 
     /** Admin: load one project's review stream: its config + tasks plus every
@@ -222,8 +227,11 @@ export default function AnnotatePage() {
         setReviewData((prev) =>
             prev ? { ...prev, adjudications: { ...prev.adjudications, [taskId]: results } } : prev,
         );
-        clearTimeout(gtSaveTimer.current);
-        gtSaveTimer.current = setTimeout(() => saveAdjudication(taskId, results), 500);
+        clearTimeout(gtSaveTimers.current.get(taskId));
+        gtSaveTimers.current.set(taskId, setTimeout(() => {
+            gtSaveTimers.current.delete(taskId);
+            saveAdjudication(taskId, results);
+        }, 500));
     };
 
     /** Save the blind setting for the chosen project, load its review stream, and
@@ -675,8 +683,8 @@ export default function AnnotatePage() {
             </header>
 
             <main className="flex-1 mx-auto w-full max-w-[1800px] p-3 lg:p-4">
-                <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
-                    <div className="md:col-span-2 lg:col-span-3 flex flex-col gap-4">
+                <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                    <div className="md:col-span-2 lg:col-span-3 xl:col-span-4 flex flex-col gap-4">
                         {reviewMode && reviewData ? (
                             <ReviewWorkspace
                                 key={`${currentCase.ID}-${configXml}-review`}
@@ -694,6 +702,7 @@ export default function AnnotatePage() {
                                 config={parsedConfig}
                                 adminKeywords={keywords}
                                 onChange={handleResultsChange}
+                                nav={{ next: handleNext, prev: handlePrev, nextUnannotated: handleNextUnannotated }}
                             />
                         )}
                     </div>

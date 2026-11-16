@@ -38,14 +38,37 @@ warning first).
 
 The UI is defined by a Label Studio-style XML config, edited by admins in
 **Labeling Setup** (editor + templates + live preview + validation) and shared
-with all annotators. Built-in templates: Classification (`<Choices>`), NER
-(`<Labels>`), Relation Extraction (`<Labels>` + `<Relations>`), Aspect-Based
-Sentiment, and Summarization (`<TextArea>`).
+with all annotators. Built-in templates: Classification (`<Choices>`), Document
+Questions (several `<Choices>`), NER (`<Labels>`), Relation Extraction
+(`<Labels>` + `<Relations>`), Aspect-Based Sentiment, and Summarization
+(`<TextArea>`).
 
 Supported tags: `<Text value="$field">`; `<Labels>`, `<Choices>`, `<TextArea>`,
 `<Rating>`, `<Relations>` (linked via `toName`, optional `perRegion="true"`); and
 `<View>` / `<Header>` for layout. The default config is in
 `src/config/labeling.json`.
+
+### Question mode
+
+A config with three or more document-level questions (`<Choices>`, `<Rating>` or
+`<TextArea>` without `perRegion`) is shown in question mode:
+
+- On a wide screen (1280 px and up) the text stays pinned on the left and the
+  questions sit beside it, so the annotator never scrolls away from the text.
+  With several `<Text>` tags, the one the questions point to (`toName`) is shown
+  in full and the others share the remaining height. A top-level `<View>` that
+  holds both a text and a question keeps the config stacked.
+- Each question is one row. The `<Header>` right before a control is its title,
+  and an optional `hint="..."` on that header is shown under the title in small
+  print. "Hide hints" folds the hints away except on the active question.
+- The active question is highlighted and takes key presses: `1` to `9` pick a
+  choice by position (or set a rating), and a `<Choice hotkey="y">` adds its own
+  key. A first answer moves on to the next open question. `↑` `↓` (or `k` `j`)
+  move between questions, `Backspace` clears the answer, `←` `→` change the
+  case, and `Enter` goes to the next unannotated case. Keys are ignored while
+  typing in a field or with a dialog open.
+
+Configs with fewer questions look and behave as before.
 
 Imports take `.csv`/`.xlsx` or a Label Studio `.json` export. After parsing, the
 admin is asked which column holds the main text to annotate (the choice is

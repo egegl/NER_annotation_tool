@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useMemo, useRef, useState } from 'react';
 import type {
   AnnotationResult,
   CaseData,
@@ -102,7 +102,15 @@ export function AnnotatorProvider({ config, caseData, onChange, adminKeywords = 
   const relations = useMemo(() => results.filter(isRelation), [results]);
   const adminKeywordTerms = useMemo(() => parseTerms(adminKeywords), [adminKeywords]);
 
-  const commit = (next: AnnotationResult[]) => onChange(next);
+  // Every change is built on the newest results, not on the ones of the last
+  // render: two key presses can arrive before the screen has caught up, and the
+  // second must not undo the first.
+  const latest = useRef(results);
+  latest.current = results;
+  const commit = (next: AnnotationResult[]) => {
+    latest.current = next;
+    onChange(next);
+  };
 
   const value = useMemo<AnnotatorCtx>(() => {
     const spanRegionsFor = (objectName: string) =>
@@ -122,13 +130,13 @@ export function AnnotatorProvider({ config, caseData, onChange, adminKeywords = 
         type: 'labels',
         value: { start, end, text, labels: [labelValue] },
       };
-      commit([...results, region]);
+      commit([...latest.current, region]);
       setSelectedRegionId(region.id);
     };
 
     const removeRegion = (id: string) => {
       commit(
-        results.filter((r) =>
+        latest.current.filter((r) =>
           isRelation(r) ? r.from_id !== id && r.to_id !== id : r.id !== id,
         ),
       );
@@ -137,11 +145,13 @@ export function AnnotatorProvider({ config, caseData, onChange, adminKeywords = 
     };
 
     const getDocResult = (controlName: string) =>
-      regions.find((r) => r.from_name === controlName);
+      latest.current.find(
+        (r): r is RegionResult => isRegion(r) && r.from_name === controlName,
+      );
 
     const setDocResult = (control: ControlTag, val: RegionValue) => {
       const existing = getDocResult(control.name);
-      const rest = results.filter(
+      const rest = latest.current.filter(
         (r) => !(isRegion(r) && r.from_name === control.name),
       );
       if (isEmptyValue(val)) {
@@ -162,7 +172,7 @@ export function AnnotatorProvider({ config, caseData, onChange, adminKeywords = 
       regions.find((r) => r.from_name === controlName && r.id === regionId);
 
     const setPerRegionResult = (control: ControlTag, regionId: string, val: RegionValue) => {
-      const rest = results.filter(
+      const rest = latest.current.filter(
         (r) => !(isRegion(r) && r.from_name === control.name && r.id === regionId),
       );
       if (isEmptyValue(val)) {
@@ -188,16 +198,16 @@ export function AnnotatorProvider({ config, caseData, onChange, adminKeywords = 
         direction: 'right',
         ...(label ? { labels: [label] } : {}),
       };
-      commit([...results, rel]);
+      commit([...latest.current, rel]);
     };
 
     const removeRelation = (rel: RelationResult) => {
-      commit(results.filter((r) => r !== rel));
+      commit(latest.current.filter((r) => r !== rel));
     };
 
     const flipRelation = (rel: RelationResult) => {
       commit(
-        results.map((r) =>
+        latest.current.map((r) =>
           r === rel
             ? { ...rel, from_id: rel.to_id, to_id: rel.from_id }
             : r,

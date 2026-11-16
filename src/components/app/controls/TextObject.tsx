@@ -55,7 +55,12 @@ export function withLineBreaks(str: string, keyBase: string): React.ReactNode[] 
   return nodes;
 }
 
-export function TextObject({ object }: { object: ObjectTag }) {
+/** How a text sizes itself in the pinned text column of question mode (wide
+ * screens only): 'primary' is the text the questions are about and shows in
+ * full up to a cap; 'fill' takes the height that is left and scrolls inside it. */
+export type TextPane = 'fill' | 'primary';
+
+export function TextObject({ object, pane }: { object: ObjectTag; pane?: TextPane }) {
   const {
     config,
     caseData,
@@ -370,7 +375,13 @@ export function TextObject({ object }: { object: ObjectTag }) {
     : '';
 
   return (
-    <div className="relative">
+    <div
+      className={cn(
+        'relative',
+        pane === 'fill' && 'xl:flex xl:min-h-0 xl:flex-col',
+        pane === 'primary' && 'xl:shrink-0',
+      )}
+    >
       {/* Toolbar: in-note search, reading controls, keyword watchlist.
           Hidden in the admin config preview. */}
       {!previewMode && (
@@ -556,7 +567,11 @@ export function TextObject({ object }: { object: ObjectTag }) {
       <div
         ref={ref}
         onMouseUp={handleMouseUp}
-        className="p-4 border rounded-md min-h-[8rem] max-h-[60vh] w-full overflow-auto"
+        className={cn(
+          'p-4 border rounded-md min-h-[8rem] max-h-[60vh] w-full overflow-auto',
+          pane === 'fill' && 'xl:max-h-none xl:min-h-[6rem]',
+          pane === 'primary' && 'xl:min-h-0 xl:max-h-[40vh]',
+        )}
         style={{
           whiteSpace: 'pre-wrap',
           fontSize: `${prefs.fontSize}px`,
