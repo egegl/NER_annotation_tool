@@ -4,6 +4,11 @@
 # ---------------------------------------------------------------------------
 # Launcher for the BMI Annotation Tool on the cluster.
 #
+# NOT for the lab's production instance on llm1. That one runs as a systemd
+# service behind nginx at a subpath; redeploy it with scripts/deploy_llm1.sh
+# (see "Bozkurt Lab production" in the README). This script serves at the root
+# with insecure cookies, and its `module load` does not work on llm1.
+#
 # Run this AFTER `git pull`: it reinstalls dependencies when they change,
 # rebuilds the app when the code changed so your pulled code actually goes live,
 # then starts the server connected to the shared database.

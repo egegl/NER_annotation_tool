@@ -137,3 +137,40 @@ prefix** (e.g. nginx `location /myapp/ { proxy_pass http://127.0.0.1:3000; }`,
 no trailing slash on `proxy_pass`). Only **one** server process may run against
 a given `DATA_DIR` (see the note in `launch_annotator.sh`). Leave `BASE_PATH`
 unset to serve at the domain root (the local terminal-launch workflow).
+
+### Bozkurt Lab production (llm1)
+
+The lab's instance runs on llm1 behind nginx at `/bmilabelapp/bozlabtool`. To
+ship a change, push it to `main`, then on llm1 run:
+
+```bash
+cd /labs/bozkurtlab/annotation-tool/NER_annotation_tool
+bash scripts/deploy_llm1.sh           # pull main, build, restart, verify
+bash scripts/deploy_llm1.sh --check   # verify only
+```
+
+From a laptop, reach llm1 through the login node:
+`ssh -t <user>@oddjobs.bmi.emory.edu ssh llm1`.
+
+| | |
+|---|---|
+| Service | systemd user unit `annotation-tool` (`~/.config/systemd/user/annotation-tool.service`), `Restart=on-failure` |
+| Listens on | `127.0.0.1:8001`, reached only through nginx |
+| Code / data | `/labs/bozkurtlab/annotation-tool/NER_annotation_tool` on `main` / `/labs/bozkurtlab/annotation-tool/data` |
+| Runtime | nvm Node 20, plus GCC 11 libraries from `/opt/modules/gcc/GCC1140/lib64` |
+| Logs | `~/annotation-tool.log` |
+
+Things that have broken it before:
+
+- **Starting the server by hand** (`next start`, `nohup`, `launch_annotator.sh`).
+  It misses the unit's environment, and it dies with your SSH session.
+  `kill`ing the service's process stops it for good, because the unit restarts
+  only on failure. Use `systemctl --user restart annotation-tool`.
+- **Missing GCC 11 libraries.** better-sqlite3 needs `GLIBCXX_3.4.29`, which the
+  system `libstdc++` lacks. Pages still load, but every login fails with "The
+  server is busy", and `~/annotation-tool.log` shows `ERR_DLOPEN_FAILED`.
+  `module load` doesn't work on llm1, so the library path is set directly.
+- **Building without `BASE_PATH`.** Every page behind the proxy breaks.
+- **Upload size.** The nginx in front is run by a separate account, so changing
+  its `client_max_body_size` goes through that account's owner. Project uploads
+  are sent in chunks of about 512 KB so they fit under nginx's 1 MB default.
