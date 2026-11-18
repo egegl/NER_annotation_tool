@@ -18,6 +18,7 @@ import { ProjectSettingsDialog } from '@/components/app/ProjectSettingsDialog';
 import { ReplaceProjectDialog } from '@/components/app/ReplaceProjectDialog';
 import { ManageProjectsDialog } from '@/components/app/ManageProjectsDialog';
 import { AccessSettingsDialog } from '@/components/app/AccessSettingsDialog';
+import { AccountMenu } from '@/components/app/AccountMenu';
 import { ExportDialog } from '@/components/app/ExportDialog';
 import { SelectTextColumnDialog } from '@/components/app/SelectTextColumnDialog';
 import { ReviewSettingsDialog } from '@/components/app/ReviewSettingsDialog';
@@ -572,7 +573,10 @@ export default function AnnotatePage() {
     // No project yet: admins can upload one; annotators wait.
     if (!currentCase) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-background p-4">
+            <div className="relative flex items-center justify-center min-h-screen bg-background p-4">
+                <div className="absolute right-4 top-3">
+                    <AccountMenu email={user} role={role} onLogout={handleLogout} />
+                </div>
                 {textColumnDialog}
                 {replaceDialog}
                 {settingsDialog}
@@ -675,9 +679,7 @@ export default function AnnotatePage() {
                                 <Users className="mr-2" /> Access Settings
                             </Button>
                         )}
-                        <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Log out">
-                            <LogOut />
-                        </Button>
+                        <AccountMenu email={user} role={role} onLogout={handleLogout} />
                     </div>
                 </div>
             </header>

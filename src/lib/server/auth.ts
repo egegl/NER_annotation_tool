@@ -94,6 +94,41 @@ export const verifyLogin = async (
   return { id: row.id, email: row.email, role: roleOf(row.role) };
 };
 
+/**
+ * Change a signed-in user's password after re-checking the current one.
+ * Returns false when the current password is wrong. On success every other
+ * session of this user is ended, so a leaked password stops working on other
+ * browsers too; the session making the change (`keepToken`) stays signed in.
+ */
+export const changePassword = async (
+  userId: number,
+  currentPassword: string,
+  newPassword: string,
+  keepToken: string | null,
+): Promise<boolean> => {
+  const row = getDb()
+    .prepare('SELECT email FROM users WHERE id = ?')
+    .get(userId) as { email: string } | undefined;
+  if (!row || !(await verifyLogin(row.email, currentPassword))) return false;
+
+  const record = await createPasswordRecord(newPassword);
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare('UPDATE users SET salt = ?, iterations = ?, password_hash = ? WHERE id = ?').run(
+      record.salt,
+      record.iterations,
+      record.passwordHash,
+      userId,
+    );
+    db.prepare('DELETE FROM sessions WHERE user_id = ? AND token IS NOT ?').run(userId, keepToken);
+  })();
+  return true;
+};
+
+/** The raw session token from the request cookie, if any. */
+export const currentSessionToken = async (): Promise<string | null> =>
+  (await cookies()).get(SESSION_COOKIE)?.value ?? null;
+
 /** Create a session row and set the httpOnly cookie. */
 export const createSession = async (userId: number) => {
   const token = randomBytes(32).toString('hex');

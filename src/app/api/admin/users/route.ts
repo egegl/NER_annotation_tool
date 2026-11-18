@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import { HttpError, requireAdmin, type Role } from '@/lib/server/auth';
 import { createUser, deleteUser, getUserProjectId, listUsers } from '@/lib/server/repo';
+import { MIN_PASSWORD_LENGTH } from '@/lib/password';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const MIN_PASSWORD_LENGTH = 8;
 
 const handle = (error: unknown) => {
   if (error instanceof HttpError) {

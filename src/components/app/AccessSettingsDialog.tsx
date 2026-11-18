@@ -34,6 +34,7 @@ import { Trash2, UserPlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/basePath';
 import { useToast } from '@/hooks/use-toast';
+import { MIN_PASSWORD_LENGTH } from '@/lib/password';
 
 type Role = 'admin' | 'annotator';
 
@@ -44,8 +45,6 @@ interface UserItem {
   /** The project this account is assigned to (its file name), or null. */
   projectFile: string | null;
 }
-
-const MIN_PASSWORD_LENGTH = 8;
 
 interface Props {
   open: boolean;
