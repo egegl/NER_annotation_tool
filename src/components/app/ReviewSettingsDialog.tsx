@@ -14,6 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { ClipboardCheck, LogOut } from 'lucide-react';
 import { api } from '@/lib/basePath';
+import { readJson } from '@/lib/http';
 
 interface ProjectListItem {
   id: number;
@@ -61,7 +62,7 @@ export function ReviewSettingsDialog({
     setDraftBlind(blind);
     setLoading(true);
     fetch(api('/api/admin/projects'))
-      .then((r) => r.json())
+      .then(readJson)
       .then((data) => {
         const list: ProjectListItem[] = data.projects ?? [];
         setProjects(list);

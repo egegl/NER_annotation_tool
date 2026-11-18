@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { UploadCloud } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/basePath';
+import { readJson } from '@/lib/http';
 
 interface UserListItem {
   id: number;
@@ -61,7 +62,7 @@ export function ReplaceProjectDialog({
     setSelected(new Set()); // none pre-selected
     setLoading(true);
     fetch(api('/api/admin/users'))
-      .then((r) => r.json())
+      .then(readJson)
       .then((data) => setUsers(data.users ?? []))
       .catch(() => toast({ variant: 'destructive', title: 'Could not load accounts.' }))
       .finally(() => setLoading(false));

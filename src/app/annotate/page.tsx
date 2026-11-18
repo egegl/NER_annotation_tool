@@ -42,7 +42,13 @@ import {
 import type { LSTask } from '@/lib/io';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/basePath';
+import { chunkByJsonSize, readJson } from '@/lib/http';
 import defaultLabeling from '@/config/labeling.json';
+
+/** Case data per upload request. The gateway's nginx rejects bodies over 1 MB
+ * by default; this leaves room for the labeling config and keywords that ride
+ * along with the first request. */
+const UPLOAD_CHUNK_BYTES = 512 * 1024;
 
 const DEFAULT_XML = (defaultLabeling as { xml: string }).xml;
 
@@ -106,8 +112,8 @@ export default function AnnotatePage() {
             fetch(api('/api/project')),
             fetch(api('/api/annotations')),
         ]);
-        const projectData = await projectRes.json();
-        const annData = await annRes.json();
+        const projectData = await readJson(projectRes);
+        const annData = await readJson(annRes);
 
         if (!projectData.project) {
             setProjectExists(false);
@@ -140,7 +146,7 @@ export default function AnnotatePage() {
                     router.push('/');
                     return;
                 }
-                const me = await meRes.json();
+                const me = await readJson(meRes);
                 setUser(me.email);
                 setRole(me.role === 'admin' ? 'admin' : 'annotator');
                 await loadProject();
@@ -195,8 +201,7 @@ export default function AnnotatePage() {
      * blind adjudication is on). Switches the workspace to that project. */
     const loadReviewProject = useCallback(async (projectId: number): Promise<ReviewData> => {
         const res = await fetch(api(`/api/review?projectId=${projectId}`));
-        const payload = await res.json();
-        if (!res.ok) throw new Error(payload.error ?? 'Could not load review data.');
+        const payload = await readJson(res);
 
         const tasks: { id: number; ID: string; data: Record<string, string> }[] = payload.tasks ?? [];
         setConfigXml(payload.project.configXml);
@@ -244,7 +249,7 @@ export default function AnnotatePage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ projectId, blind }),
             });
-            if (!res.ok) throw new Error((await res.json()).error ?? 'Could not save review settings.');
+            await readJson(res);
             const fresh = await loadReviewProject(projectId);
             setReviewMode(true);
             // Start the review stream at the first conflict awaiting a decision.
@@ -293,7 +298,7 @@ export default function AnnotatePage() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ configXml: xml }),
                 });
-                if (!res.ok) throw new Error((await res.json()).error ?? 'Save failed.');
+                await readJson(res);
             } catch (error) {
                 toast({ variant: 'destructive', title: 'Could not save config', description: error instanceof Error ? error.message : undefined });
                 return;
@@ -392,14 +397,42 @@ export default function AnnotatePage() {
         adminKeywords: string,
         assignUserIds: number[],
     ) => {
+        // Send the cases in pieces small enough for the reverse proxy's body
+        // limit. The first request creates the project with no accounts; the
+        // last one assigns them, so nobody sees a half-uploaded project.
+        const chunks = chunkByJsonSize(cases, UPLOAD_CHUNK_BYTES);
+        const progress = chunks.length > 1
+            ? toast({ title: 'Uploading…', description: `Sending part 1 of ${chunks.length}.` })
+            : null;
+        let projectId: number | null = null;
         try {
-            const res = await fetch(api('/api/project'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fileName: name, configXml, keywords: adminKeywords, cases, assignUserIds }),
+            const send = async (method: 'POST' | 'PUT', body: unknown) =>
+                readJson(await fetch(api('/api/project'), {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                }));
+
+            const isLast = (i: number) => i === chunks.length - 1;
+            let result = await send('POST', {
+                fileName: name,
+                configXml,
+                keywords: adminKeywords,
+                cases: chunks[0],
+                assignUserIds: isLast(0) ? assignUserIds : [],
             });
-            const result = await res.json();
-            if (!res.ok) throw new Error(result.error ?? 'Upload failed.');
+            projectId = result.projectId;
+            for (let i = 1; i < chunks.length; i++) {
+                progress?.update({ id: progress.id, title: 'Uploading…', description: `Sending part ${i + 1} of ${chunks.length}.` });
+                result = await send('PUT', {
+                    projectId,
+                    cases: chunks[i],
+                    assignUserIds: isLast(i) ? assignUserIds : [],
+                });
+            }
+            projectId = null; // complete: nothing to clean up
+
+            progress?.dismiss();
             // Reflects in the admin's own view only if they assigned themselves.
             await loadProject();
             const n = result.assigned ?? assignUserIds.length;
@@ -408,6 +441,16 @@ export default function AnnotatePage() {
                 description: `${result.count} cases uploaded and assigned to ${n} account${n === 1 ? '' : 's'}.`,
             });
         } catch (error) {
+            progress?.dismiss();
+            // Drop a partly uploaded project so it doesn't linger in Manage
+            // Projects. It has no accounts yet, so the delete is allowed.
+            if (projectId != null) {
+                await fetch(api('/api/admin/projects'), {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: projectId }),
+                }).catch(() => undefined);
+            }
             toast({ variant: 'destructive', title: 'Upload Failed', description: error instanceof Error ? error.message : undefined });
         }
     };

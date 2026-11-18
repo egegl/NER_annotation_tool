@@ -122,6 +122,46 @@ export const createProjectAndAssign = (
 };
 
 /**
+ * Continue a chunked upload: append more cases to a project created by
+ * createProjectAndAssign with no accounts, then (on the last chunk) assign the
+ * chosen accounts. Large files are split this way so no single request exceeds
+ * the reverse proxy's body-size limit. Appending is refused once any account is
+ * assigned, so this can only grow a project that is still being uploaded and
+ * never touches one annotators are working on. Returns the project's case count.
+ */
+export const appendTasksAndAssign = (
+  projectId: number,
+  cases: CaseData[],
+  assignUserIds: number[],
+): number => {
+  const db = getDb();
+  const tx = db.transaction(() => {
+    if (!getProjectById(projectId)) throw new Error('That project no longer exists.');
+    const assigned = (
+      db.prepare('SELECT COUNT(*) AS n FROM users WHERE project_id = ?').get(projectId) as { n: number }
+    ).n;
+    if (assigned > 0) {
+      throw new Error('Cases can only be added to a project that is still uploading.');
+    }
+
+    const start = (
+      db.prepare('SELECT COUNT(*) AS n FROM tasks WHERE project_id = ?').get(projectId) as { n: number }
+    ).n;
+    const insert = db.prepare(
+      'INSERT INTO tasks (project_id, idx, external_id, data_json) VALUES (?, ?, ?, ?)',
+    );
+    cases.forEach((c, i) => {
+      insert.run(projectId, start + i, c.ID, JSON.stringify(c.data));
+    });
+
+    const assign = db.prepare('UPDATE users SET project_id = ? WHERE id = ?');
+    for (const uid of assignUserIds) assign.run(projectId, uid);
+    return start + cases.length;
+  });
+  return tx();
+};
+
+/**
  * Delete a project and everything under it: its tasks, and their annotations
  * and adjudications (all via ON DELETE CASCADE). Only allowed when no account is
  * assigned to it, so an actively-used project can't be wiped by accident;

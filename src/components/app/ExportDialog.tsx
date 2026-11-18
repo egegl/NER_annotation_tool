@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { FileDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/basePath';
+import { readJson } from '@/lib/http';
 
 interface UserListItem {
   id: number;
@@ -58,8 +59,8 @@ export function ExportDialog({ open, onOpenChange, defaultProjectId }: Props) {
     if (!open) return;
     setLoading(true);
     Promise.all([
-      fetch(api('/api/admin/users')).then((r) => r.json()),
-      fetch(api('/api/admin/projects')).then((r) => r.json()),
+      fetch(api('/api/admin/users')).then(readJson),
+      fetch(api('/api/admin/projects')).then(readJson),
     ])
       .then(([userData, projectData]) => {
         const list: UserListItem[] = userData.users ?? [];
@@ -102,10 +103,8 @@ export function ExportDialog({ open, onOpenChange, defaultProjectId }: Props) {
           includePatientNote,
         }),
       });
-      if (!response.ok) {
-        const result = await response.json().catch(() => ({}));
-        throw new Error(result.error ?? 'Export failed.');
-      }
+      // Throws with the server's message, or the HTTP status if the proxy answered.
+      if (!response.ok) await readJson(response);
       const disposition = response.headers.get('Content-Disposition') ?? '';
       const match = disposition.match(/filename="?([^"]+)"?/);
       const filename = match?.[1] ?? `export.${format}`;

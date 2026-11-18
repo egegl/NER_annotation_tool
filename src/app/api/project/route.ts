@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { CaseData } from '@/types';
 import { HttpError, requireAdmin, requireUser } from '@/lib/server/auth';
 import {
+  appendTasksAndAssign,
   createProjectAndAssign,
   getTasksForProject,
   getUserProject,
@@ -81,6 +82,35 @@ export async function POST(request: Request) {
       assignUserIds,
     );
     return NextResponse.json({ ok: true, count: cases.length, projectId, assigned: assignUserIds.length });
+  } catch (error) {
+    return handle(error);
+  }
+}
+
+/**
+ * Admin only: the later chunks of a large upload. The client creates the project
+ * with the first chunk (POST, no accounts), sends the rest here, and passes
+ * `assignUserIds` with the last chunk so accounts only see the project once
+ * every case is in.
+ */
+export async function PUT(request: Request) {
+  try {
+    await requireAdmin();
+    const body = (await request.json()) as {
+      projectId?: number;
+      cases?: CaseData[];
+      assignUserIds?: number[];
+    };
+    const projectId = Number(body.projectId);
+    if (!Number.isInteger(projectId) || !Array.isArray(body.cases)) {
+      return NextResponse.json({ error: 'projectId and a cases array are required.' }, { status: 400 });
+    }
+    const assignUserIds = Array.isArray(body.assignUserIds)
+      ? body.assignUserIds.filter((id): id is number => Number.isInteger(id))
+      : [];
+    const cases = body.cases.map((c) => ({ ID: c.ID, data: c.data, results: [] }));
+    const count = appendTasksAndAssign(projectId, cases, assignUserIds);
+    return NextResponse.json({ ok: true, count, projectId, assigned: assignUserIds.length });
   } catch (error) {
     return handle(error);
   }

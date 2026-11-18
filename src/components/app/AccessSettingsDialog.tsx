@@ -33,6 +33,7 @@ import { Badge } from '@/components/ui/badge';
 import { Trash2, UserPlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/basePath';
+import { readJson } from '@/lib/http';
 import { useToast } from '@/hooks/use-toast';
 import { MIN_PASSWORD_LENGTH } from '@/lib/password';
 
@@ -76,8 +77,7 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail }: Props
     setListError('');
     try {
       const res = await fetch(api('/api/admin/users'));
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error ?? 'Could not load accounts.');
+      const result = await readJson(res);
       setUsers(result.users as UserItem[]);
     } catch (err) {
       setListError(err instanceof Error ? err.message : 'Could not load accounts.');
@@ -116,8 +116,7 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail }: Props
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, role }),
       });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error ?? 'Could not create the account.');
+      const result = await readJson(res);
       toast({ title: 'Account created', description: `${result.user.email} (${result.user.role}) can now log in.` });
       resetCreateForm();
       await loadUsers();
@@ -137,8 +136,7 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail }: Props
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: pendingDelete.id }),
       });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error ?? 'Could not delete the account.');
+      const result = await readJson(res);
       toast({ title: 'Account deleted', description: `${pendingDelete.email} can no longer log in.` });
       setPendingDelete(null);
       await loadUsers();

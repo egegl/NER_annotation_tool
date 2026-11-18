@@ -29,6 +29,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
 import { api } from '@/lib/basePath';
+import { readJson } from '@/lib/http';
 import { useToast } from '@/hooks/use-toast';
 
 interface ProjectItem {
@@ -65,8 +66,7 @@ export function ManageProjectsDialog({ open, onOpenChange, currentProjectId, onD
     setListError('');
     try {
       const res = await fetch(api('/api/admin/projects'));
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error ?? 'Could not load projects.');
+      const result = await readJson(res);
       setProjects(result.projects as ProjectItem[]);
     } catch (err) {
       setListError(err instanceof Error ? err.message : 'Could not load projects.');
@@ -86,8 +86,7 @@ export function ManageProjectsDialog({ open, onOpenChange, currentProjectId, onD
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: pendingDelete.id }),
       });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error ?? 'Could not delete the project.');
+      const result = await readJson(res);
       toast({ title: 'Project deleted', description: `${pendingDelete.fileName} and its annotations were removed.` });
       setPendingDelete(null);
       await loadProjects();
