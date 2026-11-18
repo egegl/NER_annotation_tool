@@ -492,6 +492,10 @@ function AnnotatorBody({ nav }: { nav?: AnnotatorNav }) {
     }
   };
 
+  // Share of the row the text column takes; the annotator drags the divider.
+  const splitRef = useRef<HTMLDivElement>(null);
+  const [splitAt, setSplitAt] = useLocalStorageState<number>('bmi.splitAt', SPLIT_DEFAULT);
+
   const showPanel = config.controls.some(
     (c) => c.type === 'Labels' || c.type === 'Relations' || c.perRegion,
   );
@@ -501,10 +505,15 @@ function AnnotatorBody({ nav }: { nav?: AnnotatorNav }) {
       <Card className="shadow-lg">
         <CardContent className="p-3 space-y-3">
           {plan.split && !previewMode ? (
-            <div className="grid gap-x-5 gap-y-3 xl:grid-cols-2">
+            <div
+              ref={splitRef}
+              className="grid gap-y-3 xl:grid-cols-[minmax(0,var(--text-fr))_1.25rem_minmax(0,var(--question-fr))]"
+              style={{ '--text-fr': `${splitAt}fr`, '--question-fr': `${1 - splitAt}fr` } as React.CSSProperties}
+            >
               <div className="flex min-w-0 flex-col gap-3 xl:sticky xl:top-16 xl:max-h-[calc(100vh-6.5rem)] xl:self-start xl:overflow-y-auto">
                 {plan.split.textNodes.map((n, i) => renderNode(n, `text-${i}`))}
               </div>
+              <SplitDivider containerRef={splitRef} value={splitAt} onChange={setSplitAt} />
               <div className="flex min-w-0 flex-col gap-0.5">
                 {plan.split.questionNodes.map((n, i) => renderNode(n, `question-${i}`))}
               </div>
@@ -525,6 +534,86 @@ function AnnotatorBody({ nav }: { nav?: AnnotatorNav }) {
           </CardContent>
         </Card>
       )}
+    </div>
+  );
+}
+
+const SPLIT_DEFAULT = 0.5;
+const SPLIT_MIN = 0.2;
+const SPLIT_MAX = 0.8;
+const clampSplit = (f: number) => Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, f));
+
+/** The bar between the text and the questions (wide screens only). Drag it to
+ *  resize the columns, double-click to even them out, or focus it and use the
+ *  left/right arrows. */
+function SplitDivider({
+  containerRef,
+  value,
+  onChange,
+}: {
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  value: number;
+  onChange: (f: number) => void;
+}) {
+  const [dragging, setDragging] = useState(false);
+
+  const fractionAt = (clientX: number) => {
+    const box = containerRef.current?.getBoundingClientRect();
+    if (!box || box.width === 0) return value;
+    return clampSplit((clientX - box.left) / box.width);
+  };
+
+  // While dragging, keep the resize cursor and stop the drag from selecting text.
+  useEffect(() => {
+    if (!dragging) return;
+    const { cursor, userSelect } = document.body.style;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    return () => {
+      document.body.style.cursor = cursor;
+      document.body.style.userSelect = userSelect;
+    };
+  }, [dragging]);
+
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize the text and question columns"
+      aria-valuemin={SPLIT_MIN * 100}
+      aria-valuemax={SPLIT_MAX * 100}
+      aria-valuenow={Math.round(value * 100)}
+      tabIndex={0}
+      title="Drag to resize · double-click to reset"
+      className="group relative hidden cursor-col-resize touch-none select-none outline-none xl:block"
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setDragging(true);
+      }}
+      onPointerMove={(e) => {
+        if (dragging) onChange(fractionAt(e.clientX));
+      }}
+      onPointerUp={() => setDragging(false)}
+      onPointerCancel={() => setDragging(false)}
+      onLostPointerCapture={() => setDragging(false)}
+      onDoubleClick={() => onChange(SPLIT_DEFAULT)}
+      onKeyDown={(e) => {
+        const step = e.key === 'ArrowLeft' ? -0.02 : e.key === 'ArrowRight' ? 0.02 : 0;
+        if (!step) return;
+        // Handled here, so the page's arrow keys don't also change the case.
+        e.preventDefault();
+        onChange(clampSplit(value + step));
+      }}
+    >
+      <div
+        className={cn(
+          'absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors',
+          'group-hover:w-0.5 group-hover:bg-primary/60 group-focus-visible:w-0.5 group-focus-visible:bg-primary',
+          dragging && 'w-0.5 bg-primary',
+        )}
+      />
     </div>
   );
 }
