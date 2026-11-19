@@ -165,7 +165,7 @@ export const appendTasksAndAssign = (
  * Delete a project and everything under it: its tasks, and their annotations
  * and adjudications (all via ON DELETE CASCADE). Only allowed when no account is
  * assigned to it, so an actively-used project can't be wiped by accident;
- * reassign its accounts (Replace Project) first.
+ * move its accounts to another project (Access Settings) first.
  */
 export const deleteProject = (projectId: number): void => {
   const db = getDb();
@@ -177,6 +177,23 @@ export const deleteProject = (projectId: number): void => {
   }
   const result = db.prepare('DELETE FROM project WHERE id = ?').run(projectId);
   if (result.changes === 0) throw new Error('That project no longer exists.');
+};
+
+/**
+ * Point one account at an existing project (or at none, with null). This is how
+ * an admin switches the project they work on and moves annotators between
+ * projects after upload. Annotations are keyed by (task, user), so the work an
+ * account did on its previous project stays in the database and is back when it
+ * returns there.
+ */
+export const assignUserToProject = (userId: number, projectId: number | null): void => {
+  if (projectId != null && !getProjectById(projectId)) {
+    throw new Error('That project no longer exists.');
+  }
+  const result = getDb()
+    .prepare('UPDATE users SET project_id = ? WHERE id = ?')
+    .run(projectId, userId);
+  if (result.changes === 0) throw new Error('That account no longer exists.');
 };
 
 /** Update one project's labeling config (keeps its tasks + annotations intact). */

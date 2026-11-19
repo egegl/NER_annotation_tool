@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { HttpError, requireAdmin, type Role } from '@/lib/server/auth';
-import { createUser, deleteUser, getUserProjectId, listUsers } from '@/lib/server/repo';
+import {
+  assignUserToProject,
+  createUser,
+  deleteUser,
+  getUserProjectId,
+  listUsers,
+} from '@/lib/server/repo';
 import { MIN_PASSWORD_LENGTH } from '@/lib/password';
 
 export const runtime = 'nodejs';
@@ -44,6 +50,30 @@ export async function POST(request: Request) {
     const projectId = getUserProjectId(admin.id);
     const user = await createUser(body.email, body.password, role, projectId);
     return NextResponse.json({ user });
+  } catch (error) {
+    return handle(error);
+  }
+}
+
+/**
+ * Admin only: move an account to an existing project (`projectId: null` leaves
+ * it on none). Its annotations on other projects are kept, so moving it back
+ * restores its earlier work.
+ */
+export async function PATCH(request: Request) {
+  try {
+    await requireAdmin();
+    const body = (await request.json()) as { id?: number; projectId?: number | null };
+    const id = Number(body.id);
+    if (!Number.isInteger(id)) {
+      return NextResponse.json({ error: 'A valid user id is required.' }, { status: 400 });
+    }
+    const projectId = body.projectId == null ? null : Number(body.projectId);
+    if (projectId !== null && !Number.isInteger(projectId)) {
+      return NextResponse.json({ error: 'projectId must be a project id or null.' }, { status: 400 });
+    }
+    assignUserToProject(id, projectId);
+    return NextResponse.json({ ok: true });
   } catch (error) {
     return handle(error);
   }

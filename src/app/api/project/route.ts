@@ -116,15 +116,23 @@ export async function PUT(request: Request) {
   }
 }
 
-/** Admin only: update the labeling config of the admin's own current project. */
+/**
+ * Admin only: update a project's labeling config. The client names the project
+ * it is showing (`projectId`), so a save from a tab that is still on an older
+ * project, or from Reviewer Mode on another file, lands on the project whose
+ * config was edited. Without one it falls back to the admin's current project.
+ */
 export async function PATCH(request: Request) {
   try {
     const admin = await requireAdmin();
-    const body = (await request.json()) as { configXml?: string };
+    const body = (await request.json()) as { configXml?: string; projectId?: number };
     if (!body.configXml) {
       return NextResponse.json({ error: 'configXml is required.' }, { status: 400 });
     }
-    const projectId = getUserProjectId(admin.id);
+    const projectId = body.projectId != null ? Number(body.projectId) : getUserProjectId(admin.id);
+    if (projectId != null && !Number.isInteger(projectId)) {
+      return NextResponse.json({ error: 'projectId must be a project id.' }, { status: 400 });
+    }
     if (!projectId) {
       return NextResponse.json({ error: 'No project to configure yet.' }, { status: 400 });
     }

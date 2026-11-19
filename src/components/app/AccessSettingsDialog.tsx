@@ -30,6 +30,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Trash2, UserPlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/basePath';
@@ -43,21 +50,37 @@ interface UserItem {
   id: number;
   email: string;
   role: Role;
-  /** The project this account is assigned to (its file name), or null. */
+  /** The project this account is assigned to, or null. */
+  projectId: number | null;
+  /** That project's file name, or null. */
   projectFile: string | null;
 }
+
+interface ProjectOption {
+  id: number;
+  fileName: string;
+}
+
+/** Radix Select needs a non-empty string for every item, so "no project" gets one. */
+const NO_PROJECT = 'none';
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** The signed-in admin's email, so we can flag their own row and block self-delete. */
   currentEmail: string | null;
+  /** Called after an account moves to another project. `isSelf` is true when the
+   * admin moved their own account, so the page can load the new project. */
+  onAccountMoved?: (isSelf: boolean) => void;
 }
 
-export function AccessSettingsDialog({ open, onOpenChange, currentEmail }: Props) {
+export function AccessSettingsDialog({ open, onOpenChange, currentEmail, onAccountMoved }: Props) {
   const { toast } = useToast();
   const [users, setUsers] = useState<UserItem[] | null>(null);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [listError, setListError] = useState('');
+  // The account whose project change is being saved (its picker is disabled).
+  const [movingId, setMovingId] = useState<number | null>(null);
 
   // Create-account form.
   const [email, setEmail] = useState('');
@@ -76,13 +99,48 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail }: Props
   const loadUsers = useCallback(async () => {
     setListError('');
     try {
-      const res = await fetch(api('/api/admin/users'));
-      const result = await readJson(res);
-      setUsers(result.users as UserItem[]);
+      const [usersRes, projectsRes] = await Promise.all([
+        fetch(api('/api/admin/users')),
+        fetch(api('/api/admin/projects')),
+      ]);
+      const usersResult = await readJson(usersRes);
+      const projectsResult = await readJson(projectsRes);
+      setUsers(usersResult.users as UserItem[]);
+      setProjects((projectsResult.projects ?? []) as ProjectOption[]);
     } catch (err) {
       setListError(err instanceof Error ? err.message : 'Could not load accounts.');
     }
   }, []);
+
+  /** Move one account to another existing project (or to none). */
+  const handleMove = async (u: UserItem, value: string) => {
+    const projectId = value === NO_PROJECT ? null : Number(value);
+    if (projectId === u.projectId) return;
+    setMovingId(u.id);
+    try {
+      const res = await fetch(api('/api/admin/users'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: u.id, projectId }),
+      });
+      await readJson(res);
+      const target = projects.find((p) => p.id === projectId)?.fileName;
+      toast({
+        title: 'Project changed',
+        description: target ? `${u.email} now works on ${target}.` : `${u.email} is no longer on a project.`,
+      });
+      await loadUsers();
+      onAccountMoved?.(u.email === currentEmail);
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: 'Could not change the project',
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setMovingId(null);
+    }
+  };
 
   useEffect(() => {
     if (open) loadUsers();
@@ -153,12 +211,12 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail }: Props
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) resetCreateForm(); onOpenChange(o); }}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Access Settings</DialogTitle>
           <DialogDescription>
-            Manage who can log in to this project. Accounts and their tier are shown
-            below; you can create new accounts or remove existing ones.
+            Manage who can log in and which project each account works on. Changing an
+            account&apos;s project keeps the annotations it made on the old one.
           </DialogDescription>
         </DialogHeader>
 
@@ -197,8 +255,30 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail }: Props
                               {u.role}
                             </Badge>
                           </TableCell>
-                          <TableCell className="max-w-[12rem] truncate text-sm text-muted-foreground" title={u.projectFile ?? undefined}>
-                            {u.projectFile ?? <span className="italic">none</span>}
+                          <TableCell className="py-1.5">
+                            <Select
+                              value={u.projectId == null ? NO_PROJECT : String(u.projectId)}
+                              onValueChange={(v) => void handleMove(u, v)}
+                              disabled={movingId === u.id}
+                            >
+                              <SelectTrigger
+                                className="h-8 w-[13rem] text-sm"
+                                aria-label={`Project for ${u.email}`}
+                                title={u.projectFile ?? 'No project'}
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={NO_PROJECT}>
+                                  <span className="italic text-muted-foreground">No project</span>
+                                </SelectItem>
+                                {projects.map((p) => (
+                                  <SelectItem key={p.id} value={String(p.id)}>
+                                    {p.fileName}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </TableCell>
                           <TableCell className="text-right">
                             <Button

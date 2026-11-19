@@ -1,16 +1,18 @@
 # BMI Annotation Tool
 
 A collaborative text annotation app (Next.js), similar to Label Studio. An admin
-uploads one shared project (a data file + an XML labeling config), and every
-logged-in user annotates their own private copy. Users don't see each other's
-work; the admin exports whichever annotators they want.
+uploads projects (a data file + an XML labeling config each) and puts every
+account on one of them; each user annotates their own private copy of that
+project. Users don't see each other's work; the admin exports whichever
+annotators they want.
 
 ## How it works
 
 The app is a Node server (`next start`) backed by one SQLite file. State lives in
 the database, not the browser. The main tables:
 
-- `project` / `tasks`: the uploaded project and its rows.
+- `project` / `tasks`: the uploaded projects and their rows. `users.project_id`
+  says which project an account is on.
 - `annotations`: each user's results, keyed by `(task, user)`.
 - `users` / `sessions`: accounts and httpOnly cookie sessions.
 
@@ -20,19 +22,41 @@ The database is at `DATA_DIR/annotation.db` (default `./data/annotation.db`).
 
 1. Admin logs in (see [Accounts](#accounts)).
 2. Admin sets the labeling XML (**Labeling Setup**) and imports a
-   `.csv`/`.xlsx`/`.json` file (**Upload Project**). Existing annotations in the
-   file are stripped.
-3. Admin creates annotator accounts (**Create Account**) and shares the URL +
-   credentials.
-4. Annotators log in and land on the shared project. They have no admin controls.
+   `.csv`/`.xlsx`/`.json` file (**Upload Project**, later **Upload new
+   project…** in the project menu). Existing annotations in the file are
+   stripped.
+3. Admin creates annotator accounts (**Access Settings** in the account menu)
+   and shares the URL + credentials.
+4. Annotators log in and land on the project they were assigned. They have no
+   admin controls.
 5. They annotate; each change auto-saves, private to them.
 6. Admin exports (**Export**): pick accounts with checkboxes, optionally exclude
    the patient note column, then download a
    Label Studio JSON (one `annotations` entry per user, tagged `completed_by`) or
    a CSV (one row per task and annotator).
 
-Re-uploading a project replaces it and deletes everyone's work (you get a
-warning first).
+### Several projects
+
+Uploading another file adds a project; it doesn't replace the old one. The
+upload dialog asks which accounts move to it, and the rest stay where they are.
+
+The top bar reads left to right as project, mode, actions, account:
+
+- **Project menu** (left corner, admin only) names the open project and lists
+  every project with its case and account counts. Picking one opens it for you,
+  and Labeling Setup, Export and newly created accounts then default to it. In
+  Review it switches the review to that project. The same menu has **Upload new
+  project…** and **Manage projects…** (an Open button per row, and delete for
+  projects no account is on).
+- **Annotate | Review** switches between your own annotating and Reviewer Mode.
+- **Labeling Setup** and **Export** act on the open project.
+- **Account menu** (right corner) has **Access Settings**, which includes a
+  project picker per account, so an annotator can be moved to any existing
+  project without uploading anything.
+
+Annotations are stored per case and per account, so moving to another project
+never deletes work. Moving back brings the earlier annotations back. An
+annotator sees one project at a time, the one an admin put them on.
 
 ## Labeling configuration
 

@@ -14,6 +14,14 @@ Login by email; admins create every account. All data sits in `/labs/bozkurtlab/
 
 Accounts and config must exist before the upload.
 
+## Top bar
+
+`[project ▾]  [Annotate | Review]  ……  [Labeling Setup]  [Export]  [account ▾]`
+
+- **Project menu** (left corner): switch project, Upload new project…, Manage projects…
+- **Annotate | Review**: your own annotating, or Reviewer Mode.
+- **Account menu** (right corner): Access Settings, Change password, Log out.
+
 ## Config (XML)
 
 `<Text value="$text">` · `<Labels>` spans · `<Choices>` pick-one/many · `<TextArea>` · `<Rating>` · `<Relations>` · `<Header>` · `<View>`
@@ -28,6 +36,14 @@ Accounts and config must exist before the upload.
 - Pick the text column (becomes `$text`) and an ID column, or auto-number `case-1, case-2, …`.
 - Optional keyword file: one term per line, underlined in every note for everyone.
 - Ticked accounts move to the new file; unticked ones keep their current project.
+
+## Projects
+
+- **Project menu**: pick a project to open it. Your work on the other project stays.
+- Didn't tick yourself at upload? The "Project Uploaded" toast has an **Open** button, or use the menu.
+- **Access Settings → Project** column: move any account to another existing project.
+- **Manage projects…**: Open or delete. Only projects with no accounts on them can be deleted.
+- Annotators see one project, the one you put them on.
 
 ## Annotating
 

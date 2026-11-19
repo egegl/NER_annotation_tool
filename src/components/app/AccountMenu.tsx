@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { ChevronDown, CircleUser, KeyRound, LogOut } from 'lucide-react';
+import { ChevronDown, CircleUser, KeyRound, LogOut, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -18,10 +18,13 @@ interface Props {
   email: string;
   role: 'admin' | 'annotator';
   onLogout: () => void;
+  /** Admin: open Access Settings (accounts and their projects). Omit to hide it. */
+  onAccessSettings?: () => void;
 }
 
-/** Header account button: who is signed in, change password, log out. */
-export function AccountMenu({ email, role, onLogout }: Props) {
+/** Header account button: who is signed in, account management (admins),
+ * change password, log out. */
+export function AccountMenu({ email, role, onLogout, onAccessSettings }: Props) {
   const [passwordOpen, setPasswordOpen] = useState(false);
 
   return (
@@ -43,6 +46,11 @@ export function AccountMenu({ email, role, onLogout }: Props) {
             </Badge>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          {onAccessSettings && (
+            <DropdownMenuItem onSelect={onAccessSettings}>
+              <Users /> Access Settings
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onSelect={() => setPasswordOpen(true)}>
             <KeyRound /> Change password
           </DropdownMenuItem>

@@ -27,7 +27,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Trash2 } from 'lucide-react';
+import { FolderOpen, Trash2 } from 'lucide-react';
 import { api } from '@/lib/basePath';
 import { readJson } from '@/lib/http';
 import { useToast } from '@/hooks/use-toast';
@@ -48,14 +48,17 @@ interface Props {
   currentProjectId: number | null;
   /** Called after a successful delete, so the parent can refresh if needed. */
   onDeleted?: () => void;
+  /** Open a project (make it the admin's current one). The dialog closes first. */
+  onOpenProject?: (projectId: number) => void;
 }
 
 /**
- * Admin-only project management. Lists every uploaded project and lets the admin
- * delete unused ones (no accounts assigned). A project with assignees must have
- * them reassigned first (Replace Project); its trash button is disabled.
+ * Admin-only project management. Lists every uploaded project, opens any of them
+ * as the admin's current project, and deletes unused ones (no accounts
+ * assigned). A project with assignees must have them moved first (Access
+ * Settings); its trash button is disabled.
  */
-export function ManageProjectsDialog({ open, onOpenChange, currentProjectId, onDeleted }: Props) {
+export function ManageProjectsDialog({ open, onOpenChange, currentProjectId, onDeleted, onOpenProject }: Props) {
   const { toast } = useToast();
   const [projects, setProjects] = useState<ProjectItem[] | null>(null);
   const [listError, setListError] = useState('');
@@ -109,9 +112,10 @@ export function ManageProjectsDialog({ open, onOpenChange, currentProjectId, onD
           <DialogHeader>
             <DialogTitle>Projects</DialogTitle>
             <DialogDescription>
-              Every uploaded project. Delete an unused one (no accounts assigned) to
-              permanently remove its cases and annotations. To delete a project that is
-              in use, first move its accounts to another file with Replace Project.
+              Every uploaded project. Open one to work on it; your annotations on the
+              others are kept. Delete an unused one (no accounts assigned) to permanently
+              remove its cases and annotations. To delete a project that is in use, first
+              move its accounts to another project in Access Settings.
             </DialogDescription>
           </DialogHeader>
 
@@ -125,17 +129,19 @@ export function ManageProjectsDialog({ open, onOpenChange, currentProjectId, onD
                     <TableHead>File</TableHead>
                     <TableHead className="w-20 text-right">Cases</TableHead>
                     <TableHead className="w-24 text-right">Accounts</TableHead>
+                    {onOpenProject && <TableHead className="w-24 text-right">Open</TableHead>}
                     <TableHead className="w-16 text-right">Delete</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {projects.map((p) => {
                     const inUse = p.assignedCount > 0;
+                    const isCurrent = p.id === currentProjectId;
                     return (
                       <TableRow key={p.id}>
                         <TableCell className="font-medium">
                           <span className="truncate">{p.fileName}</span>
-                          {p.id === currentProjectId && (
+                          {isCurrent && !onOpenProject && (
                             <span className="ml-2 text-xs text-muted-foreground">(your project)</span>
                           )}
                           {p.createdBy && (
@@ -144,6 +150,24 @@ export function ManageProjectsDialog({ open, onOpenChange, currentProjectId, onD
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{p.taskCount}</TableCell>
                         <TableCell className="text-right tabular-nums">{p.assignedCount}</TableCell>
+                        {onOpenProject && (
+                          <TableCell className="text-right">
+                            <Button
+                              variant={isCurrent ? 'ghost' : 'outline'}
+                              size="sm"
+                              className="h-8"
+                              disabled={isCurrent}
+                              title={isCurrent ? 'This project is open now.' : `Open ${p.fileName}`}
+                              onClick={() => {
+                                onOpenChange(false);
+                                onOpenProject(p.id);
+                              }}
+                            >
+                              {!isCurrent && <FolderOpen className="mr-1.5 h-4 w-4" />}
+                              {isCurrent ? 'Current' : 'Open'}
+                            </Button>
+                          </TableCell>
+                        )}
                         <TableCell className="text-right">
                           <Button
                             variant="ghost"
@@ -152,7 +176,7 @@ export function ManageProjectsDialog({ open, onOpenChange, currentProjectId, onD
                             disabled={inUse}
                             title={
                               inUse
-                                ? 'Reassign its accounts (Replace Project) before deleting.'
+                                ? 'Move its accounts to another project (Access Settings) before deleting.'
                                 : `Delete ${p.fileName}`
                             }
                             onClick={() => setPendingDelete(p)}

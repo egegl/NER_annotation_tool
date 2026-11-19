@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { FileUp, FileDown, ChevronLeft, ChevronRight, FileText, UploadCloud, LogOut, Settings2, Check, Users, SkipForward, ClipboardCheck, Layers } from 'lucide-react';
+import { FileDown, FolderOpen, Pencil, ChevronLeft, ChevronRight, FileText, UploadCloud, LogOut, Settings2, Check, Users, SkipForward, ClipboardCheck } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { Annotator } from '@/components/app/annotator';
 import { ProjectSettingsDialog } from '@/components/app/ProjectSettingsDialog';
@@ -19,6 +19,8 @@ import { ReplaceProjectDialog } from '@/components/app/ReplaceProjectDialog';
 import { ManageProjectsDialog } from '@/components/app/ManageProjectsDialog';
 import { AccessSettingsDialog } from '@/components/app/AccessSettingsDialog';
 import { AccountMenu } from '@/components/app/AccountMenu';
+import { ProjectSwitcher, type ProjectSummary } from '@/components/app/ProjectSwitcher';
+import { ToastAction } from '@/components/ui/toast';
 import { ExportDialog } from '@/components/app/ExportDialog';
 import { SelectTextColumnDialog } from '@/components/app/SelectTextColumnDialog';
 import { ReviewSettingsDialog } from '@/components/app/ReviewSettingsDialog';
@@ -62,9 +64,11 @@ export default function AnnotatePage() {
     const [configXml, setConfigXml] = useState<string>(DEFAULT_XML);
     // Admin-set always-highlight keywords, shared with all annotators.
     const [keywords, setKeywords] = useState('');
-    const [projectExists, setProjectExists] = useState(false);
-    // The admin's own assigned project id (drives selector defaults).
+    // The signed-in account's own current project id (drives selector defaults).
     const [myProjectId, setMyProjectId] = useState<number | null>(null);
+    // Admin: every project, for the header switcher (null until first loaded).
+    const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
+    const [switching, setSwitching] = useState(false);
     // While in Reviewer Mode, the project being reviewed (may differ from myProjectId).
     const [reviewProjectId, setReviewProjectId] = useState<number | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -79,9 +83,11 @@ export default function AnnotatePage() {
     const [showSaved, setShowSaved] = useState(false);
     const savedTimer = useRef<ReturnType<typeof setTimeout>>();
     // Debounced saves, one timer per task: moving to the next case must not
-    // cancel a save that is still waiting for the case just left.
-    const saveTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
-    const gtSaveTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+    // cancel a save that is still waiting for the case just left. The results
+    // ride along so a project switch can send them at once (flushPendingSaves).
+    type PendingSave = { timer: ReturnType<typeof setTimeout>; results: AnnotationResult[] };
+    const saveTimers = useRef(new Map<number, PendingSave>());
+    const gtSaveTimers = useRef(new Map<number, PendingSave>());
     const { toast } = useToast();
     const dataFileInputRef = useRef<HTMLInputElement>(null);
     const [user, setUser] = useState<string | null>(null);
@@ -106,8 +112,9 @@ export default function AnnotatePage() {
     const isAdmin = role === 'admin';
     const parsedConfig = useMemo(() => parseLabelConfig(configXml), [configXml]);
 
-    /** Load the shared project + this user's own annotations into the UI. */
-    const loadProject = useCallback(async () => {
+    /** Load this account's current project + its own annotations into the UI.
+     * Returns the loaded project's id, or null when the account is on none. */
+    const loadProject = useCallback(async (): Promise<number | null> => {
         const [projectRes, annRes] = await Promise.all([
             fetch(api('/api/project')),
             fetch(api('/api/annotations')),
@@ -116,18 +123,17 @@ export default function AnnotatePage() {
         const annData = await readJson(annRes);
 
         if (!projectData.project) {
-            setProjectExists(false);
             setMyProjectId(null);
             setData([]);
             setTaskIds([]);
             setFileName('');
-            return;
+            setCurrentIndex(0);
+            return null;
         }
 
         const annotations: Record<number, AnnotationResult[]> = annData.annotations ?? {};
         const tasks: { id: number; ID: string; data: Record<string, string> }[] = projectData.tasks ?? [];
 
-        setProjectExists(true);
         setMyProjectId(projectData.project.id ?? null);
         setConfigXml(projectData.project.configXml);
         setKeywords(projectData.project.keywords ?? '');
@@ -135,6 +141,21 @@ export default function AnnotatePage() {
         setTaskIds(tasks.map((t) => t.id));
         setData(tasks.map((t) => ({ ID: t.ID, data: t.data, results: annotations[t.id] ?? [] })));
         setCurrentIndex(0);
+        return projectData.project.id ?? null;
+    }, []);
+
+    /** Admin: reload the project list for the switcher. Returns the admin's
+     * current project id as the server sees it (null on failure or none). */
+    const refreshProjects = useCallback(async (): Promise<number | null> => {
+        try {
+            const payload = await readJson(await fetch(api('/api/admin/projects')));
+            setProjects((payload.projects ?? []) as ProjectSummary[]);
+            return payload.currentProjectId ?? null;
+        } catch (error) {
+            console.error('Could not load projects', error);
+            setProjects((prev) => prev ?? []);
+            return null;
+        }
     }, []);
 
     // On mount: confirm the session, then load the project + annotations.
@@ -149,7 +170,7 @@ export default function AnnotatePage() {
                 const me = await readJson(meRes);
                 setUser(me.email);
                 setRole(me.role === 'admin' ? 'admin' : 'annotator');
-                await loadProject();
+                await Promise.all([loadProject(), me.role === 'admin' ? refreshProjects() : null]);
             } catch (error) {
                 console.error('Could not load session', error);
                 router.push('/');
@@ -157,12 +178,12 @@ export default function AnnotatePage() {
                 setLoading(false);
             }
         })();
-    }, [router, loadProject]);
+    }, [router, loadProject, refreshProjects]);
 
     useEffect(() => () => {
         clearTimeout(savedTimer.current);
-        saveTimers.current.forEach((t) => clearTimeout(t));
-        gtSaveTimers.current.forEach((t) => clearTimeout(t));
+        saveTimers.current.forEach((t) => clearTimeout(t.timer));
+        gtSaveTimers.current.forEach((t) => clearTimeout(t.timer));
     }, []);
 
     const flashSaved = () => {
@@ -189,11 +210,14 @@ export default function AnnotatePage() {
         setData((prev) => prev.map((c, i) => (i === currentIndex ? { ...c, results } : c)));
         const taskId = taskIds[currentIndex];
         if (taskId == null) return;
-        clearTimeout(saveTimers.current.get(taskId));
-        saveTimers.current.set(taskId, setTimeout(() => {
-            saveTimers.current.delete(taskId);
-            saveAnnotation(taskId, results);
-        }, 500));
+        clearTimeout(saveTimers.current.get(taskId)?.timer);
+        saveTimers.current.set(taskId, {
+            results,
+            timer: setTimeout(() => {
+                saveTimers.current.delete(taskId);
+                saveAnnotation(taskId, results);
+            }, 500),
+        });
     };
 
     /** Admin: load one project's review stream: its config + tasks plus every
@@ -233,12 +257,46 @@ export default function AnnotatePage() {
         setReviewData((prev) =>
             prev ? { ...prev, adjudications: { ...prev.adjudications, [taskId]: results } } : prev,
         );
-        clearTimeout(gtSaveTimers.current.get(taskId));
-        gtSaveTimers.current.set(taskId, setTimeout(() => {
-            gtSaveTimers.current.delete(taskId);
-            saveAdjudication(taskId, results);
-        }, 500));
+        clearTimeout(gtSaveTimers.current.get(taskId)?.timer);
+        gtSaveTimers.current.set(taskId, {
+            results,
+            timer: setTimeout(() => {
+                gtSaveTimers.current.delete(taskId);
+                saveAdjudication(taskId, results);
+            }, 500),
+        });
     };
+
+    /** Send every debounced save now instead of waiting out its timer, so work
+     * on the case just edited is stored before the page loads another project
+     * (or logs out). */
+    const flushPendingSaves = useCallback(async () => {
+        const jobs: Promise<void>[] = [];
+        saveTimers.current.forEach(({ timer, results }, taskId) => {
+            clearTimeout(timer);
+            jobs.push(saveAnnotation(taskId, results));
+        });
+        saveTimers.current.clear();
+        gtSaveTimers.current.forEach(({ timer, results }, taskId) => {
+            clearTimeout(timer);
+            jobs.push(saveAdjudication(taskId, results));
+        });
+        gtSaveTimers.current.clear();
+        await Promise.all(jobs);
+    }, [saveAnnotation, saveAdjudication]);
+
+    /** Load a project's review stream and start at its first conflict awaiting
+     * a decision. */
+    const enterReview = useCallback(async (projectId: number) => {
+        const fresh = await loadReviewProject(projectId);
+        setReviewMode(true);
+        const freshConfig = parseLabelConfig(fresh.project?.configXml ?? DEFAULT_XML);
+        const freshTaskIds = (fresh.tasks ?? []).map((t) => t.id);
+        const firstConflict = freshTaskIds.findIndex(
+            (tid) => caseReviewStatus(freshConfig, fresh.annotations[tid], fresh.adjudications[tid]) === 'conflict',
+        );
+        setCurrentIndex(firstConflict >= 0 ? firstConflict : 0);
+    }, [loadReviewProject]);
 
     /** Save the blind setting for the chosen project, load its review stream, and
      * enter Reviewer Mode. Rethrows so the settings dialog stays open on failure. */
@@ -250,15 +308,7 @@ export default function AnnotatePage() {
                 body: JSON.stringify({ projectId, blind }),
             });
             await readJson(res);
-            const fresh = await loadReviewProject(projectId);
-            setReviewMode(true);
-            // Start the review stream at the first conflict awaiting a decision.
-            const freshConfig = parseLabelConfig(fresh.project?.configXml ?? configXml);
-            const freshTaskIds = (fresh.tasks ?? []).map((t) => t.id);
-            const firstConflict = freshTaskIds.findIndex(
-                (tid) => caseReviewStatus(freshConfig, fresh.annotations[tid], fresh.adjudications[tid]) === 'conflict',
-            );
-            setCurrentIndex(firstConflict >= 0 ? firstConflict : 0);
+            await enterReview(projectId);
         } catch (error) {
             toast({
                 variant: 'destructive',
@@ -278,7 +328,54 @@ export default function AnnotatePage() {
 
     const reviewBlind = reviewData?.settings.blind ?? true;
 
+    /** The project on screen: the one under review in Reviewer Mode, else the
+     * account's own. */
+    const shownProjectId = reviewMode ? reviewProjectId : myProjectId;
+
+    /** Admin: open another project. It becomes the admin's current project; in
+     * Reviewer Mode the review switches to it too. Nothing is lost on the project
+     * left behind: pending saves are sent first, and annotations stay per task. */
+    const switchProject = async (projectId: number) => {
+        if (switching || projectId === shownProjectId) return;
+        setSwitching(true);
+        try {
+            await flushPendingSaves();
+            const res = await fetch(api('/api/project/active'), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projectId }),
+            });
+            await readJson(res);
+            if (reviewMode) {
+                setMyProjectId(projectId);
+                await enterReview(projectId);
+            } else {
+                await loadProject();
+            }
+            setJumpValue('');
+            const name = projects?.find((p) => p.id === projectId)?.fileName;
+            toast({
+                title: 'Project opened',
+                description: name ? `You are now working on ${name}.` : undefined,
+            });
+        } catch (error) {
+            toast({
+                variant: 'destructive',
+                title: 'Could not open the project',
+                description: error instanceof Error ? error.message : 'Please try again.',
+            });
+        } finally {
+            setSwitching(false);
+            void refreshProjects();
+        }
+    };
+    // Toast actions outlive the render that created them; calling through a ref
+    // keeps them on the current state (e.g. Reviewer Mode entered since).
+    const switchProjectRef = useRef(switchProject);
+    switchProjectRef.current = switchProject;
+
     const handleLogout = async () => {
+        await flushPendingSaves();
         try {
             await fetch(api('/api/auth/logout'), { method: 'POST' });
         } catch (error) {
@@ -291,12 +388,12 @@ export default function AnnotatePage() {
      * stages the config locally; it is sent with the first upload. */
     const handleSaveConfig = async (xml: string) => {
         setConfigXml(xml);
-        if (projectExists) {
+        if (shownProjectId != null) {
             try {
                 const res = await fetch(api('/api/project'), {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ configXml: xml }),
+                    body: JSON.stringify({ configXml: xml, projectId: shownProjectId }),
                 });
                 await readJson(res);
             } catch (error) {
@@ -422,6 +519,7 @@ export default function AnnotatePage() {
                 assignUserIds: isLast(0) ? assignUserIds : [],
             });
             projectId = result.projectId;
+            const newProjectId: number = result.projectId;
             for (let i = 1; i < chunks.length; i++) {
                 progress?.update({ id: progress.id, title: 'Uploading…', description: `Sending part ${i + 1} of ${chunks.length}.` });
                 result = await send('PUT', {
@@ -433,12 +531,19 @@ export default function AnnotatePage() {
             projectId = null; // complete: nothing to clean up
 
             progress?.dismiss();
-            // Reflects in the admin's own view only if they assigned themselves.
-            await loadProject();
+            // Reflects in the admin's own view only if they assigned themselves;
+            // otherwise the toast offers to open it.
+            const nowOn = await refreshProjects();
+            if (!reviewMode) await loadProject();
             const n = result.assigned ?? assignUserIds.length;
             toast({
                 title: 'Project Uploaded',
                 description: `${result.count} cases uploaded and assigned to ${n} account${n === 1 ? '' : 's'}.`,
+                action: nowOn === newProjectId ? undefined : (
+                    <ToastAction altText={`Open ${name}`} onClick={() => void switchProjectRef.current(newProjectId)}>
+                        Open
+                    </ToastAction>
+                ),
             });
         } catch (error) {
             progress?.dismiss();
@@ -574,6 +679,12 @@ export default function AnnotatePage() {
             open={accessSettingsOpen}
             onOpenChange={setAccessSettingsOpen}
             currentEmail={user}
+            onAccountMoved={(isSelf) => {
+                void refreshProjects();
+                // The admin moved their own account: show the new project (in
+                // Reviewer Mode it loads when the mode is exited).
+                if (isSelf && !reviewMode) void loadProject();
+            }}
         />
     ) : null;
 
@@ -585,11 +696,13 @@ export default function AnnotatePage() {
         <ManageProjectsDialog
             open={manageProjectsOpen}
             onOpenChange={setManageProjectsOpen}
-            currentProjectId={myProjectId}
+            currentProjectId={shownProjectId}
             onDeleted={() => {
+                void refreshProjects();
                 // If the project being reviewed was deleted, leave Reviewer Mode.
                 if (reviewMode && reviewProjectId != null) handleReviewExit();
             }}
+            onOpenProject={(id) => void switchProject(id)}
         />
     ) : null;
 
@@ -602,6 +715,18 @@ export default function AnnotatePage() {
             defaultProjectId={reviewProjectId ?? myProjectId}
             onConfirm={handleReviewConfirm}
             onExit={handleReviewExit}
+        />
+    ) : null;
+
+    const projectSwitcher = isAdmin ? (
+        <ProjectSwitcher
+            projects={projects}
+            currentProjectId={shownProjectId}
+            switching={switching}
+            onSelect={(id) => void switchProject(id)}
+            onUpload={() => dataFileInputRef.current?.click()}
+            onManage={() => setManageProjectsOpen(true)}
+            onOpen={() => void refreshProjects()}
         />
     ) : null;
 
@@ -618,7 +743,12 @@ export default function AnnotatePage() {
         return (
             <div className="relative flex items-center justify-center min-h-screen bg-background p-4">
                 <div className="absolute right-4 top-3">
-                    <AccountMenu email={user} role={role} onLogout={handleLogout} />
+                    <AccountMenu
+                        email={user}
+                        role={role}
+                        onLogout={handleLogout}
+                        onAccessSettings={isAdmin ? () => setAccessSettingsOpen(true) : undefined}
+                    />
                 </div>
                 {textColumnDialog}
                 {replaceDialog}
@@ -632,23 +762,23 @@ export default function AnnotatePage() {
                         </div>
                         <CardTitle className="mt-4 text-2xl font-bold">BMI Annotation Tool</CardTitle>
                         <CardDescription>
-                            {isAdmin
-                                ? 'Configure the labeling setup, then upload a project to share with all annotators.'
-                                : 'No project has been set up yet. Please check back once an admin uploads one.'}
+                            {!isAdmin
+                                ? 'No project has been set up yet. Please check back once an admin uploads one.'
+                                : projects && projects.length > 0
+                                  ? `You have no project open. Open one of the ${projects.length} uploaded project${projects.length === 1 ? '' : 's'}, or upload a new one.`
+                                  : 'Configure the labeling setup, then upload a project to share with all annotators.'}
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
                         {isAdmin ? (
                             <div className="flex flex-col gap-3 items-center">
                                 <input type="file" ref={dataFileInputRef} onChange={handleFileImport} className="hidden" accept=".csv,.xlsx,.xls,.json" />
+                                {projects && projects.length > 0 && projectSwitcher}
                                 <Button size="lg" onClick={() => dataFileInputRef.current?.click()}>
                                     <UploadCloud className="mr-2" /> Upload Project
                                 </Button>
                                 <Button variant="outline" onClick={() => setSettingsOpen(true)}>
                                     <Settings2 className="mr-2" /> Labeling Setup
-                                </Button>
-                                <Button variant="outline" onClick={() => setManageProjectsOpen(true)}>
-                                    <Layers className="mr-2" /> Projects
                                 </Button>
                                 <Button variant="outline" onClick={() => setAccessSettingsOpen(true)}>
                                     <Users className="mr-2" /> Access Settings
@@ -675,19 +805,38 @@ export default function AnnotatePage() {
             {exportDialog}
             {reviewSettingsDialog}
             <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b">
-                <div className="mx-auto w-full max-w-[1800px] px-4 h-14 flex items-center justify-between">
+                <div className="mx-auto w-full max-w-[1800px] px-4 h-14 flex items-center justify-between gap-3">
+                    {/* Left: which project, then which mode. Right: what to do with
+                        the project, then the account. */}
                     <div className="flex min-w-0 items-center gap-3">
-                        <h1 className="truncate text-xl font-bold text-primary">BMI Annotation Tool</h1>
+                        {isAdmin ? projectSwitcher : (
+                            <div className="flex min-w-0 items-center gap-2 text-sm font-semibold" title={fileName}>
+                                <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                <span className="truncate">{fileName}</span>
+                            </div>
+                        )}
                         {isAdmin && (
-                            <Button
-                                size="sm"
-                                variant={reviewMode ? 'default' : 'outline'}
-                                className={cn(reviewMode && 'bg-amber-600 text-white hover:bg-amber-700')}
-                                aria-pressed={reviewMode}
-                                onClick={() => setReviewDialogOpen(true)}
-                            >
-                                <ClipboardCheck className="mr-1.5 h-4 w-4" /> Reviewer Mode
-                            </Button>
+                            <div role="group" aria-label="Mode" className="flex shrink-0 rounded-md border p-0.5">
+                                <Button
+                                    size="sm"
+                                    variant={reviewMode ? 'ghost' : 'secondary'}
+                                    className="h-8"
+                                    aria-pressed={!reviewMode}
+                                    onClick={() => { if (reviewMode) handleReviewExit(); }}
+                                >
+                                    <Pencil className="mr-1.5 h-4 w-4" /> Annotate
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className={cn('h-8', reviewMode && 'bg-amber-600 text-white hover:bg-amber-700 hover:text-white')}
+                                    aria-pressed={reviewMode}
+                                    title={reviewMode ? 'Reviewer Mode settings' : 'Enter Reviewer Mode'}
+                                    onClick={() => setReviewDialogOpen(true)}
+                                >
+                                    <ClipboardCheck className="mr-1.5 h-4 w-4" /> Review
+                                </Button>
+                            </div>
                         )}
                         {reviewMode && (
                             <Badge variant="secondary" className="hidden shrink-0 sm:inline-flex">
@@ -695,7 +844,7 @@ export default function AnnotatePage() {
                             </Badge>
                         )}
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex shrink-0 items-center gap-2">
                         <input type="file" ref={dataFileInputRef} onChange={handleFileImport} className="hidden" accept=".csv,.xlsx,.xls,.json" />
                         {isAdmin && (
                             <Button variant="outline" onClick={() => setSettingsOpen(true)}>
@@ -703,26 +852,16 @@ export default function AnnotatePage() {
                             </Button>
                         )}
                         {isAdmin && (
-                            <Button variant="outline" onClick={() => dataFileInputRef.current?.click()}>
-                                <FileUp className="mr-2" /> Replace Project
-                            </Button>
-                        )}
-                        {isAdmin && (
                             <Button onClick={() => setExportOpen(true)}>
                                 <FileDown className="mr-2" /> Export
                             </Button>
                         )}
-                        {isAdmin && (
-                            <Button variant="outline" onClick={() => setManageProjectsOpen(true)}>
-                                <Layers className="mr-2" /> Projects
-                            </Button>
-                        )}
-                        {isAdmin && (
-                            <Button variant="outline" onClick={() => setAccessSettingsOpen(true)}>
-                                <Users className="mr-2" /> Access Settings
-                            </Button>
-                        )}
-                        <AccountMenu email={user} role={role} onLogout={handleLogout} />
+                        <AccountMenu
+                            email={user}
+                            role={role}
+                            onLogout={handleLogout}
+                            onAccessSettings={isAdmin ? () => setAccessSettingsOpen(true) : undefined}
+                        />
                     </div>
                 </div>
             </header>
@@ -732,7 +871,7 @@ export default function AnnotatePage() {
                     <div className="md:col-span-2 lg:col-span-3 xl:col-span-4 flex flex-col gap-4">
                         {reviewMode && reviewData ? (
                             <ReviewWorkspace
-                                key={`${currentCase.ID}-${configXml}-review`}
+                                key={`${shownProjectId}-${currentCase.ID}-${configXml}-review`}
                                 caseData={currentCase}
                                 config={parsedConfig}
                                 annotators={reviewData.annotators}
@@ -742,7 +881,7 @@ export default function AnnotatePage() {
                             />
                         ) : (
                             <Annotator
-                                key={`${currentCase.ID}-${configXml}`}
+                                key={`${shownProjectId}-${currentCase.ID}-${configXml}`}
                                 caseData={currentCase}
                                 config={parsedConfig}
                                 adminKeywords={keywords}
