@@ -44,6 +44,7 @@ Accounts and config must exist before the upload.
 - **Access Settings → Project** column: move any account to another existing project.
 - **Manage projects…**: Open or delete. Only projects with no accounts on them can be deleted.
 - Annotators see one project, the one you put them on.
+- You only see projects you uploaded (or are on). Other admins' show as "Another admin's project".
 
 ## Annotating
 

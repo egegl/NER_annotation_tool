@@ -23,6 +23,8 @@ interface UserListItem {
   role: 'admin' | 'annotator';
   projectId: number | null;
   projectFile: string | null;
+  /** On a project another admin owns (its file name is withheld). */
+  projectHidden?: boolean;
 }
 
 interface Props {
@@ -145,7 +147,11 @@ export function ReplaceProjectDialog({
                     )}
                   </span>
                   <span className="shrink-0 text-xs text-muted-foreground">
-                    {u.projectFile ? `on: ${u.projectFile}` : 'no project'}
+                    {u.projectHidden
+                      ? "on another admin's project"
+                      : u.projectFile
+                        ? `on: ${u.projectFile}`
+                        : 'no project'}
                   </span>
                 </Label>
               </div>

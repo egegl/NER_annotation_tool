@@ -54,6 +54,13 @@ The top bar reads left to right as project, mode, actions, account:
   project picker per account, so an annotator can be moved to any existing
   project without uploading anything.
 
+Each admin sees only the projects they uploaded, plus the one they are on (when
+another admin assigned them). The server enforces this on every project route
+(switching, review, export, config, delete), so another admin's file names,
+cases and annotations never reach the browser; in account lists their projects
+show as "Another admin's project". New admin accounts start on no project. Old
+projects with no recorded uploader stay visible to every admin.
+
 Annotations are stored per case and per account, so moving to another project
 never deletes work. Moving back brings the earlier annotations back. An
 annotator sees one project at a time, the one an admin put them on.

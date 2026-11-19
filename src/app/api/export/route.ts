@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { HttpError, requireAdmin } from '@/lib/server/auth';
-import { gatherExport, getProjectById } from '@/lib/server/repo';
+import { gatherExport, requireVisibleProject } from '@/lib/server/repo';
 import {
   multiUserCasesToCsv,
   multiUserCasesToTasks,
@@ -27,7 +27,7 @@ const handle = (error: unknown) => {
  */
 export async function POST(request: Request) {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
 
     const body = (await request.json()) as {
       projectId?: number;
@@ -39,10 +39,7 @@ export async function POST(request: Request) {
     if (!Number.isInteger(body.projectId)) {
       return NextResponse.json({ error: 'A valid projectId is required.' }, { status: 400 });
     }
-    const project = getProjectById(body.projectId as number);
-    if (!project) {
-      return NextResponse.json({ error: 'That project no longer exists.' }, { status: 404 });
-    }
+    const project = requireVisibleProject(admin, body.projectId as number);
 
     const userIds = Array.isArray(body.userIds) ? body.userIds : [];
     const format = body.format === 'csv' ? 'csv' : 'json';

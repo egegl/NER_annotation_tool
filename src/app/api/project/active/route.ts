@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { HttpError, requireAdmin } from '@/lib/server/auth';
-import { assignUserToProject } from '@/lib/server/repo';
+import { assignUserToProject, requireVisibleProject } from '@/lib/server/repo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -26,6 +26,7 @@ export async function PUT(request: Request) {
     if (!Number.isInteger(projectId)) {
       return NextResponse.json({ error: 'A valid projectId is required.' }, { status: 400 });
     }
+    requireVisibleProject(admin, projectId);
     assignUserToProject(admin.id, projectId);
     return NextResponse.json({ ok: true, projectId });
   } catch (error) {

@@ -54,6 +54,8 @@ interface UserItem {
   projectId: number | null;
   /** That project's file name, or null. */
   projectFile: string | null;
+  /** On a project another admin owns: id and file name are withheld. */
+  projectHidden?: boolean;
 }
 
 interface ProjectOption {
@@ -61,8 +63,10 @@ interface ProjectOption {
   fileName: string;
 }
 
-/** Radix Select needs a non-empty string for every item, so "no project" gets one. */
+/** Radix Select needs a non-empty string for every item, so "no project" and
+ * "another admin's project" get one each. */
 const NO_PROJECT = 'none';
+const HIDDEN_PROJECT = 'hidden';
 
 interface Props {
   open: boolean;
@@ -114,8 +118,9 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail, onAccou
 
   /** Move one account to another existing project (or to none). */
   const handleMove = async (u: UserItem, value: string) => {
+    if (value === HIDDEN_PROJECT) return;
     const projectId = value === NO_PROJECT ? null : Number(value);
-    if (projectId === u.projectId) return;
+    if (projectId === u.projectId && !u.projectHidden) return;
     setMovingId(u.id);
     try {
       const res = await fetch(api('/api/admin/users'), {
@@ -257,14 +262,24 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail, onAccou
                           </TableCell>
                           <TableCell className="py-1.5">
                             <Select
-                              value={u.projectId == null ? NO_PROJECT : String(u.projectId)}
+                              value={
+                                u.projectHidden
+                                  ? HIDDEN_PROJECT
+                                  : u.projectId == null
+                                    ? NO_PROJECT
+                                    : String(u.projectId)
+                              }
                               onValueChange={(v) => void handleMove(u, v)}
                               disabled={movingId === u.id}
                             >
                               <SelectTrigger
                                 className="h-8 w-[13rem] text-sm"
                                 aria-label={`Project for ${u.email}`}
-                                title={u.projectFile ?? 'No project'}
+                                title={
+                                  u.projectHidden
+                                    ? "On another admin's project"
+                                    : u.projectFile ?? 'No project'
+                                }
                               >
                                 <SelectValue />
                               </SelectTrigger>
@@ -272,6 +287,11 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail, onAccou
                                 <SelectItem value={NO_PROJECT}>
                                   <span className="italic text-muted-foreground">No project</span>
                                 </SelectItem>
+                                {u.projectHidden && (
+                                  <SelectItem value={HIDDEN_PROJECT} disabled>
+                                    <span className="italic text-muted-foreground">Another admin&apos;s project</span>
+                                  </SelectItem>
+                                )}
                                 {projects.map((p) => (
                                   <SelectItem key={p.id} value={String(p.id)}>
                                     {p.fileName}

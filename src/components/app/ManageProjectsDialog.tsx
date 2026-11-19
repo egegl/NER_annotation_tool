@@ -108,12 +108,12 @@ export function ManageProjectsDialog({ open, onOpenChange, currentProjectId, onD
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Projects</DialogTitle>
             <DialogDescription>
-              Every uploaded project. Open one to work on it; your annotations on the
-              others are kept. Delete an unused one (no accounts assigned) to permanently
+              The projects you uploaded (other admins&apos; projects are not shown). Open
+              one to work on it; your annotations on the others are kept. Delete an unused one (no accounts assigned) to permanently
               remove its cases and annotations. To delete a project that is in use, first
               move its accounts to another project in Access Settings.
             </DialogDescription>
@@ -123,13 +123,15 @@ export function ManageProjectsDialog({ open, onOpenChange, currentProjectId, onD
 
           {projects && projects.length > 0 && (
             <div className="max-h-[420px] overflow-auto rounded-md border">
-              <Table>
+              {/* Fixed layout: the action columns keep their width and a long
+                  file name truncates instead of pushing them out of view. */}
+              <Table className="table-fixed">
                 <TableHeader>
                   <TableRow>
                     <TableHead>File</TableHead>
                     <TableHead className="w-20 text-right">Cases</TableHead>
                     <TableHead className="w-24 text-right">Accounts</TableHead>
-                    {onOpenProject && <TableHead className="w-24 text-right">Open</TableHead>}
+                    {onOpenProject && <TableHead className="w-28 text-right">Open</TableHead>}
                     <TableHead className="w-16 text-right">Delete</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -140,12 +142,14 @@ export function ManageProjectsDialog({ open, onOpenChange, currentProjectId, onD
                     return (
                       <TableRow key={p.id}>
                         <TableCell className="font-medium">
-                          <span className="truncate">{p.fileName}</span>
-                          {isCurrent && !onOpenProject && (
-                            <span className="ml-2 text-xs text-muted-foreground">(your project)</span>
-                          )}
+                          <div className="truncate" title={p.fileName}>
+                            {p.fileName}
+                            {isCurrent && !onOpenProject && (
+                              <span className="ml-2 text-xs text-muted-foreground">(your project)</span>
+                            )}
+                          </div>
                           {p.createdBy && (
-                            <div className="text-xs text-muted-foreground">by {p.createdBy}</div>
+                            <div className="truncate text-xs text-muted-foreground">by {p.createdBy}</div>
                           )}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{p.taskCount}</TableCell>

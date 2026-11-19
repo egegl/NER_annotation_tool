@@ -6,6 +6,8 @@ import {
   deleteUser,
   getUserProjectId,
   listUsers,
+  listUsersForAdmin,
+  requireVisibleProject,
 } from '@/lib/server/repo';
 import { MIN_PASSWORD_LENGTH } from '@/lib/password';
 
@@ -20,11 +22,13 @@ const handle = (error: unknown) => {
   return NextResponse.json({ error: message }, { status: 400 });
 };
 
-/** Admin only: list every account (used by the export picker + management). */
+/** Admin only: list every account (used by the export picker + management).
+ * Accounts on another admin's project show as on a hidden project, without its
+ * id or file name. */
 export async function GET() {
   try {
-    await requireAdmin();
-    return NextResponse.json({ users: listUsers() });
+    const admin = await requireAdmin();
+    return NextResponse.json({ users: listUsersForAdmin(admin) });
   } catch (error) {
     return handle(error);
   }
@@ -45,9 +49,11 @@ export async function POST(request: Request) {
       );
     }
     const role: Role = body.role === 'admin' ? 'admin' : 'annotator';
-    // New accounts join the creating admin's current project (if any), so they
-    // pick up the work already in progress; the admin can move them later.
-    const projectId = getUserProjectId(admin.id);
+    // New annotators join the creating admin's current project (if any), so
+    // they pick up the work already in progress; the admin can move them later.
+    // New admins start on no project: being on a project makes it visible to
+    // them, and admins only see their own projects unless deliberately added.
+    const projectId = role === 'admin' ? null : getUserProjectId(admin.id);
     const user = await createUser(body.email, body.password, role, projectId);
     return NextResponse.json({ user });
   } catch (error) {
@@ -62,7 +68,7 @@ export async function POST(request: Request) {
  */
 export async function PATCH(request: Request) {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
     const body = (await request.json()) as { id?: number; projectId?: number | null };
     const id = Number(body.id);
     if (!Number.isInteger(id)) {
@@ -72,6 +78,8 @@ export async function PATCH(request: Request) {
     if (projectId !== null && !Number.isInteger(projectId)) {
       return NextResponse.json({ error: 'projectId must be a project id or null.' }, { status: 400 });
     }
+    // An admin can only move accounts onto projects they can see.
+    if (projectId !== null) requireVisibleProject(admin, projectId);
     assignUserToProject(id, projectId);
     return NextResponse.json({ ok: true });
   } catch (error) {

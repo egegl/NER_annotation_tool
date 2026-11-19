@@ -4,8 +4,9 @@ import { HttpError, requireAdmin } from '@/lib/server/auth';
 import {
   gatherReview,
   getAdjudications,
-  getProjectById,
+  getTaskProjectId,
   getTasksForProject,
+  requireVisibleProject,
   saveAdjudication,
   setReviewBlind,
 } from '@/lib/server/repo';
@@ -30,15 +31,12 @@ const handle = (error: unknown) => {
  */
 export async function GET(request: Request) {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
     const projectId = Number(new URL(request.url).searchParams.get('projectId'));
     if (!Number.isInteger(projectId)) {
       return NextResponse.json({ error: 'A valid projectId is required.' }, { status: 400 });
     }
-    const project = getProjectById(projectId);
-    if (!project) {
-      return NextResponse.json({ error: 'That project no longer exists.' }, { status: 404 });
-    }
+    const project = requireVisibleProject(admin, projectId);
     const blind = project.review_blind !== 0;
 
     const { annotators, byTask } = gatherReview(projectId);
@@ -85,6 +83,11 @@ export async function PUT(request: Request) {
         { status: 400 },
       );
     }
+    const projectId = getTaskProjectId(body.taskId);
+    if (projectId == null) {
+      return NextResponse.json({ error: 'That case no longer exists.' }, { status: 404 });
+    }
+    requireVisibleProject(admin, projectId);
     saveAdjudication(body.taskId, admin.id, body.results);
     return NextResponse.json({ ok: true });
   } catch (error) {
@@ -95,7 +98,7 @@ export async function PUT(request: Request) {
 /** Admin only: update a project's blind-adjudication setting. */
 export async function PATCH(request: Request) {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
     const body = (await request.json()) as { projectId?: number; blind?: boolean };
     if (typeof body.blind !== 'boolean' || !Number.isInteger(body.projectId)) {
       return NextResponse.json(
@@ -103,6 +106,7 @@ export async function PATCH(request: Request) {
         { status: 400 },
       );
     }
+    requireVisibleProject(admin, body.projectId as number);
     setReviewBlind(body.projectId as number, body.blind);
     return NextResponse.json({ ok: true });
   } catch (error) {

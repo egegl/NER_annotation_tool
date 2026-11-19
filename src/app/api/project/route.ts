@@ -7,6 +7,7 @@ import {
   getTasksForProject,
   getUserProject,
   getUserProjectId,
+  requireVisibleProject,
   updateProjectConfig,
 } from '@/lib/server/repo';
 
@@ -95,7 +96,7 @@ export async function POST(request: Request) {
  */
 export async function PUT(request: Request) {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
     const body = (await request.json()) as {
       projectId?: number;
       cases?: CaseData[];
@@ -105,6 +106,7 @@ export async function PUT(request: Request) {
     if (!Number.isInteger(projectId) || !Array.isArray(body.cases)) {
       return NextResponse.json({ error: 'projectId and a cases array are required.' }, { status: 400 });
     }
+    requireVisibleProject(admin, projectId);
     const assignUserIds = Array.isArray(body.assignUserIds)
       ? body.assignUserIds.filter((id): id is number => Number.isInteger(id))
       : [];
@@ -136,6 +138,7 @@ export async function PATCH(request: Request) {
     if (!projectId) {
       return NextResponse.json({ error: 'No project to configure yet.' }, { status: 400 });
     }
+    requireVisibleProject(admin, projectId);
     updateProjectConfig(projectId, body.configXml);
     return NextResponse.json({ ok: true });
   } catch (error) {

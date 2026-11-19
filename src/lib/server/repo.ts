@@ -3,9 +3,11 @@ import { getDb } from '@/lib/db';
 import type { AnnotationResult, CaseData } from '@/types';
 import {
   createPasswordRecord,
+  HttpError,
   isValidEmail,
   normalizeEmail,
   type Role,
+  type SessionUser,
 } from '@/lib/server/auth';
 
 // ---------------------------------------------------------------------------
@@ -66,8 +68,45 @@ export interface ProjectListItem {
   taskCount: number;
 }
 
-/** Every project, newest first, with assignment + size counts (admin pickers). */
-export const listProjects = (): ProjectListItem[] =>
+// ---------------------------------------------------------------------------
+// Admin visibility: each admin sees only their own projects
+// ---------------------------------------------------------------------------
+//
+// An admin sees a project when they uploaded it (created_by), or when they are
+// currently assigned to it (another admin put them on it). Projects with no
+// recorded creator predate per-admin ownership and stay visible to every admin,
+// since nobody could manage them otherwise. Every admin route that takes a
+// project id checks this, so another admin's file names, cases and
+// annotations never reach the client.
+
+const VISIBLE_TO_ADMIN = `(p.created_by = @email OR p.created_by IS NULL
+  OR p.id = (SELECT project_id FROM users WHERE id = @userId))`;
+
+/** Whether this admin may see and manage the project. */
+export const canAdminSeeProject = (admin: SessionUser, projectId: number): boolean =>
+  !!getDb()
+    .prepare(`SELECT 1 FROM project p WHERE p.id = @projectId AND ${VISIBLE_TO_ADMIN}`)
+    .get({ projectId, email: admin.email, userId: admin.id });
+
+/** The project row if this admin may see it. Otherwise a 404 that reads the
+ * same as a deleted project, so ids of other admins' projects reveal nothing. */
+export const requireVisibleProject = (admin: SessionUser, projectId: number): ProjectRow => {
+  const project = getProjectById(projectId);
+  if (!project || !canAdminSeeProject(admin, projectId)) {
+    throw new HttpError(404, 'That project no longer exists.');
+  }
+  return project;
+};
+
+/** The project a task belongs to, or null. */
+export const getTaskProjectId = (taskId: number): number | null =>
+  ((getDb().prepare('SELECT project_id FROM tasks WHERE id = ?').get(taskId) as
+    | { project_id: number }
+    | undefined)?.project_id ?? null);
+
+/** The projects this admin can see, newest first, with assignment + size
+ * counts (switcher, Projects dialog, Reviewer Mode and Export pickers). */
+export const listProjectsForAdmin = (admin: SessionUser): ProjectListItem[] =>
   getDb()
     .prepare(
       `SELECT p.id AS id,
@@ -77,9 +116,10 @@ export const listProjects = (): ProjectListItem[] =>
               (SELECT COUNT(*) FROM users u WHERE u.project_id = p.id) AS assignedCount,
               (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS taskCount
          FROM project p
+        WHERE ${VISIBLE_TO_ADMIN}
         ORDER BY p.created_at DESC, p.id DESC`,
     )
-    .all() as ProjectListItem[];
+    .all({ email: admin.email, userId: admin.id }) as ProjectListItem[];
 
 /**
  * Create a new project (labeling config + unannotated task rows) and assign the
@@ -344,6 +384,9 @@ export interface UserListItem {
   projectId: number | null;
   /** That project's file name, for display, or null when unassigned. */
   projectFile: string | null;
+  /** True when the account is on a project the viewing admin can't see; its
+   * id and file name are then left out (see listUsersForAdmin). */
+  projectHidden?: boolean;
 }
 
 /** All users (with their assigned project), for admin pickers + management. */
@@ -357,6 +400,18 @@ export const listUsers = (): UserListItem[] =>
         ORDER BY u.email`,
     )
     .all() as UserListItem[];
+
+/** All users, with the project of any account that sits on another admin's
+ * project masked: the viewing admin learns that it is on some project, not
+ * which file. */
+export const listUsersForAdmin = (admin: SessionUser): UserListItem[] => {
+  const visible = new Set(listProjectsForAdmin(admin).map((p) => p.id));
+  return listUsers().map((u) =>
+    u.projectId == null || visible.has(u.projectId)
+      ? u
+      : { ...u, projectId: null, projectFile: null, projectHidden: true },
+  );
+};
 
 /** Delete an account by id. Its sessions and annotations cascade away (see the
  * `ON DELETE CASCADE` foreign keys), so this permanently removes that user's
