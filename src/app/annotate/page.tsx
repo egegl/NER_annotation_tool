@@ -829,7 +829,7 @@ export default function AnnotatePage() {
                                 <Button
                                     size="sm"
                                     variant="ghost"
-                                    className={cn('h-8', reviewMode && 'bg-amber-600 text-white hover:bg-amber-700 hover:text-white')}
+                                    className={cn('h-8', reviewMode && 'bg-amber-800 text-amber-50 hover:bg-amber-900 hover:text-amber-50')}
                                     aria-pressed={reviewMode}
                                     title={reviewMode ? 'Reviewer Mode settings' : 'Enter Reviewer Mode'}
                                     onClick={() => setReviewDialogOpen(true)}
