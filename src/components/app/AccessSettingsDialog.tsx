@@ -260,7 +260,7 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail, onAccou
                               {u.role}
                             </Badge>
                           </TableCell>
-                          <TableCell className="py-1.5">
+                          <TableCell className="py-2">
                             <Select
                               value={
                                 u.projectHidden
@@ -273,7 +273,7 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail, onAccou
                               disabled={movingId === u.id}
                             >
                               <SelectTrigger
-                                className="h-8 w-[13rem] text-sm"
+                                className="w-[13rem]"
                                 aria-label={`Project for ${u.email}`}
                                 title={
                                   u.projectHidden
@@ -304,7 +304,7 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail, onAccou
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              className="text-muted-foreground hover:text-destructive"
                               disabled={disabled}
                               title={
                                 isSelf
@@ -390,7 +390,7 @@ export function AccessSettingsDialog({ open, onOpenChange, currentEmail, onAccou
             {createError && <p className="text-sm text-destructive">{createError}</p>}
             <div className="flex justify-end">
               <Button type="submit" disabled={isCreating}>
-                <UserPlus className="mr-2 h-4 w-4" />
+                <UserPlus />
                 {isCreating ? 'Creating…' : 'Create account'}
               </Button>
             </div>

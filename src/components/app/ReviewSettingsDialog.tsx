@@ -148,7 +148,7 @@ export function ReviewSettingsDialog({
               }}
               disabled={busy}
             >
-              <LogOut className="mr-2 h-4 w-4" /> Exit Reviewer Mode
+              <LogOut /> Exit Reviewer Mode
             </Button>
           ) : (
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
@@ -156,7 +156,7 @@ export function ReviewSettingsDialog({
             </Button>
           )}
           <Button onClick={handleConfirm} disabled={busy || loading || projectId == null}>
-            <ClipboardCheck className="mr-2 h-4 w-4" />
+            <ClipboardCheck />
             {active ? 'Save settings' : 'Enter Reviewer Mode'}
           </Button>
         </DialogFooter>

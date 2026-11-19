@@ -771,22 +771,24 @@ export default function AnnotatePage() {
                     </CardHeader>
                     <CardContent>
                         {isAdmin ? (
-                            <div className="flex flex-col gap-3 items-center">
+                            <div className="mx-auto flex w-60 flex-col gap-2">
                                 <input type="file" ref={dataFileInputRef} onChange={handleFileImport} className="hidden" accept=".csv,.xlsx,.xls,.json" />
-                                {projects && projects.length > 0 && projectSwitcher}
-                                <Button size="lg" onClick={() => dataFileInputRef.current?.click()}>
-                                    <UploadCloud className="mr-2" /> Upload Project
+                                {projects && projects.length > 0 && (
+                                    <div className="[&>button]:w-full [&>button]:max-w-none">{projectSwitcher}</div>
+                                )}
+                                <Button onClick={() => dataFileInputRef.current?.click()}>
+                                    <UploadCloud /> Upload Project
                                 </Button>
                                 <Button variant="outline" onClick={() => setSettingsOpen(true)}>
-                                    <Settings2 className="mr-2" /> Labeling Setup
+                                    <Settings2 /> Labeling Setup
                                 </Button>
                                 <Button variant="outline" onClick={() => setAccessSettingsOpen(true)}>
-                                    <Users className="mr-2" /> Access Settings
+                                    <Users /> Access Settings
                                 </Button>
                             </div>
                         ) : (
                             <Button variant="ghost" onClick={handleLogout}>
-                                <LogOut className="mr-2" /> Log out
+                                <LogOut /> Log out
                             </Button>
                         )}
                     </CardContent>
@@ -807,7 +809,9 @@ export default function AnnotatePage() {
             <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b">
                 <div className="mx-auto w-full max-w-[1800px] px-4 h-14 flex items-center justify-between gap-3">
                     {/* Left: which project, then which mode. Right: what to do with
-                        the project, then the account. */}
+                        the project, then the account. Every control here is
+                        size="sm" (36px tall) with the button's own icon gap, so
+                        heights and icon spacing line up across the bar. */}
                     <div className="flex min-w-0 items-center gap-3">
                         {isAdmin ? projectSwitcher : (
                             <div className="flex min-w-0 items-center gap-2 text-sm font-semibold" title={fileName}>
@@ -816,25 +820,27 @@ export default function AnnotatePage() {
                             </div>
                         )}
                         {isAdmin && (
-                            <div role="group" aria-label="Mode" className="flex shrink-0 rounded-md border p-0.5">
+                            // Same 36px outer height as a size="sm" button; the two
+                            // segments fill it inside the 2px inset.
+                            <div role="group" aria-label="Mode" className="flex h-9 shrink-0 items-stretch gap-0.5 rounded-md border p-0.5">
                                 <Button
                                     size="sm"
                                     variant={reviewMode ? 'ghost' : 'secondary'}
-                                    className="h-8"
+                                    className="h-auto rounded-sm px-2.5"
                                     aria-pressed={!reviewMode}
                                     onClick={() => { if (reviewMode) handleReviewExit(); }}
                                 >
-                                    <Pencil className="mr-1.5 h-4 w-4" /> Annotate
+                                    <Pencil /> Annotate
                                 </Button>
                                 <Button
                                     size="sm"
                                     variant="ghost"
-                                    className={cn('h-8', reviewMode && 'bg-amber-800 text-amber-50 hover:bg-amber-900 hover:text-amber-50')}
+                                    className={cn('h-auto rounded-sm px-2.5', reviewMode && 'bg-amber-800 text-amber-50 hover:bg-amber-900 hover:text-amber-50')}
                                     aria-pressed={reviewMode}
                                     title={reviewMode ? 'Reviewer Mode settings' : 'Enter Reviewer Mode'}
                                     onClick={() => setReviewDialogOpen(true)}
                                 >
-                                    <ClipboardCheck className="mr-1.5 h-4 w-4" /> Review
+                                    <ClipboardCheck /> Review
                                 </Button>
                             </div>
                         )}
@@ -847,13 +853,13 @@ export default function AnnotatePage() {
                     <div className="flex shrink-0 items-center gap-2">
                         <input type="file" ref={dataFileInputRef} onChange={handleFileImport} className="hidden" accept=".csv,.xlsx,.xls,.json" />
                         {isAdmin && (
-                            <Button variant="outline" onClick={() => setSettingsOpen(true)}>
-                                <Settings2 className="mr-2" /> Labeling Setup
+                            <Button size="sm" variant="outline" onClick={() => setSettingsOpen(true)}>
+                                <Settings2 /> Labeling Setup
                             </Button>
                         )}
                         {isAdmin && (
-                            <Button onClick={() => setExportOpen(true)}>
-                                <FileDown className="mr-2" /> Export
+                            <Button size="sm" onClick={() => setExportOpen(true)}>
+                                <FileDown /> Export
                             </Button>
                         )}
                         <AccountMenu
@@ -905,12 +911,12 @@ export default function AnnotatePage() {
                             </CardHeader>
                             <CardContent className="p-3 pt-0 flex flex-col gap-3">
                                 {reviewMode && (
-                                    <div className="flex rounded-md border p-0.5">
+                                    <div className="flex h-9 items-stretch gap-0.5 rounded-md border p-0.5">
                                         <Button
                                             type="button"
                                             variant={conflictsOnly ? 'ghost' : 'secondary'}
                                             size="sm"
-                                            className="h-7 flex-1"
+                                            className="h-auto flex-1 rounded-sm"
                                             onClick={() => setConflictsOnly(false)}
                                         >
                                             Show all cases
@@ -919,7 +925,7 @@ export default function AnnotatePage() {
                                             type="button"
                                             variant={conflictsOnly ? 'secondary' : 'ghost'}
                                             size="sm"
-                                            className="h-7 flex-1"
+                                            className="h-auto flex-1 rounded-sm"
                                             onClick={() => setConflictsOnly(true)}
                                         >
                                             Conflicts only
@@ -969,19 +975,19 @@ export default function AnnotatePage() {
                                 )}
                                 <div className="flex gap-2">
                                     <Button variant="outline" className="flex-1 min-w-0" onClick={handlePrev} disabled={!hasPrevVisible}>
-                                        <ChevronLeft className="mr-1 h-4 w-4 shrink-0" /> Prev
+                                        <ChevronLeft /> Prev
                                     </Button>
                                     <Button variant="default" className="flex-1 min-w-0 bg-primary hover:bg-primary/90" onClick={handleNext} disabled={!hasNextVisible}>
-                                        Next <ChevronRight className="ml-1 h-4 w-4 shrink-0" />
+                                        Next <ChevronRight />
                                     </Button>
                                 </div>
                                 {reviewMode ? (
                                     <Button variant="outline" className="w-full" onClick={handleNextConflict} disabled={reviewStats.conflicts === 0}>
-                                        <SkipForward className="mr-2 h-4 w-4 shrink-0" /> Next unresolved conflict
+                                        <SkipForward /> Next unresolved conflict
                                     </Button>
                                 ) : (
                                     <Button variant="outline" className="w-full" onClick={handleNextUnannotated} disabled={annotatedCount === data.length}>
-                                        <SkipForward className="mr-2 h-4 w-4 shrink-0" /> Next unannotated
+                                        <SkipForward /> Next unannotated
                                     </Button>
                                 )}
                                 {reviewMode ? (

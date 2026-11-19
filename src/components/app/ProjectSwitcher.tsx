@@ -61,14 +61,15 @@ export function ProjectSwitcher({
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
-          className={cn('max-w-[300px] justify-between gap-2 font-semibold', className)}
+          size="sm"
+          className={cn('max-w-[300px] justify-between', className)}
           disabled={switching}
           title={current ? `Project: ${current.fileName}` : undefined}
           aria-label="Switch project"
         >
-          <FolderOpen className="h-4 w-4 shrink-0" />
+          <FolderOpen />
           <span className="truncate">{label}</span>
-          <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-60" />
+          <ChevronsUpDown className="opacity-60" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-80">

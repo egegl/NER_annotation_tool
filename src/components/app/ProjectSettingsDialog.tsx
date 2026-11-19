@@ -167,7 +167,7 @@ export function ProjectSettingsDialog({ open, onOpenChange, currentXml, onSave, 
           ) : (
             <>
               <Button variant="ghost" onClick={() => loadTemplate(DEFAULT_XML)}>
-                <RotateCcw className="mr-2 h-4 w-4" /> Reset to default
+                <RotateCcw /> Reset to default
               </Button>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => onOpenChange(false)}>

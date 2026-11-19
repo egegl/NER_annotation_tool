@@ -31,10 +31,10 @@ export function AccountMenu({ email, role, onLogout, onAccessSettings }: Props) 
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="gap-2 px-2" aria-label="Account settings">
-            <CircleUser className="h-5 w-5" />
+          <Button variant="ghost" size="sm" className="px-2" aria-label="Account settings">
+            <CircleUser />
             <span className="hidden max-w-[180px] truncate text-sm lg:inline">{email}</span>
-            <ChevronDown className="h-4 w-4 opacity-60" />
+            <ChevronDown className="opacity-60" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">

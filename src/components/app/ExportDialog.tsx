@@ -230,10 +230,10 @@ export function ExportDialog({ open, onOpenChange, defaultProjectId }: Props) {
             disabled={exporting || projectId == null || (selected.size === 0 && !includeGroundTruth)}
             onClick={() => handleExport('csv')}
           >
-            <FileDown className="mr-2 h-4 w-4" /> CSV
+            <FileDown /> CSV
           </Button>
           <Button disabled={exporting || projectId == null || (selected.size === 0 && !includeGroundTruth)} onClick={() => handleExport('json')}>
-            <FileDown className="mr-2 h-4 w-4" /> Label Studio JSON
+            <FileDown /> Label Studio JSON
           </Button>
         </DialogFooter>
       </DialogContent>

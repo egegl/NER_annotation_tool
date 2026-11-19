@@ -183,7 +183,7 @@ export function SelectTextColumnDialog({
               className="shrink-0"
               onClick={() => keywordsInputRef.current?.click()}
             >
-              <Upload className="mr-2 h-4 w-4" />
+              <Upload />
               {keywordsFileName ? 'Replace file' : 'Choose file'}
             </Button>
             {keywordsFileName ? (

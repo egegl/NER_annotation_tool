@@ -164,7 +164,7 @@ export function ReplaceProjectDialog({
             Cancel
           </Button>
           <Button onClick={handleConfirm} disabled={busy || loading}>
-            <UploadCloud className="mr-2 h-4 w-4" />
+            <UploadCloud />
             {selected.size === 0
               ? 'Upload without assigning'
               : `Upload & assign to ${selected.size}`}

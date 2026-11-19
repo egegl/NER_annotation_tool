@@ -159,7 +159,6 @@ export function ManageProjectsDialog({ open, onOpenChange, currentProjectId, onD
                             <Button
                               variant={isCurrent ? 'ghost' : 'outline'}
                               size="sm"
-                              className="h-8"
                               disabled={isCurrent}
                               title={isCurrent ? 'This project is open now.' : `Open ${p.fileName}`}
                               onClick={() => {
@@ -167,7 +166,7 @@ export function ManageProjectsDialog({ open, onOpenChange, currentProjectId, onD
                                 onOpenProject(p.id);
                               }}
                             >
-                              {!isCurrent && <FolderOpen className="mr-1.5 h-4 w-4" />}
+                              {!isCurrent && <FolderOpen />}
                               {isCurrent ? 'Current' : 'Open'}
                             </Button>
                           </TableCell>
@@ -176,7 +175,7 @@ export function ManageProjectsDialog({ open, onOpenChange, currentProjectId, onD
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            className="text-muted-foreground hover:text-destructive"
                             disabled={inUse}
                             title={
                               inUse
